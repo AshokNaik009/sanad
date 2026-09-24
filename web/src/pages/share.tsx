@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Logo } from "../App";
 import { aed, date } from "../api";
 
 /** Public patient page: no login, minimal data, expiring link. */
@@ -14,7 +15,7 @@ export function SharePage({ token }: { token: string }) {
     <div className="min-h-screen bg-page px-4 py-8">
       <div className="mx-auto max-w-md">
         <div className="mb-6 flex items-center gap-2">
-          <span className="grid size-8 place-items-center rounded-lg bg-brand font-bold text-brand-ink">K</span>
+          <Logo size={28} />
           <span className="text-[15px] font-semibold">Your visit, explained</span>
         </div>
         {error && <div className="glass rounded-2xl p-5 text-[14px]">{error}</div>}
@@ -49,6 +50,9 @@ export function SharePage({ token }: { token: string }) {
           </div>
         )}
         {data && <p className="mt-6 text-center text-[11.5px] text-muted">This link expires {date(data.expiresAt)}. It shows no medical advice. Questions? Contact the clinic front desk.</p>}
+        <div className="mt-4 text-center">
+          <a href="#/explain" className="text-[12px] text-muted hover:text-white">Explain another bill →</a>
+        </div>
       </div>
     </div>
   );

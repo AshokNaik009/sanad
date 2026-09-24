@@ -4,12 +4,16 @@ import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { z } from "zod";
 import { EXAMPLE_QUESTIONS, askCopilot } from "./ai/copilot.ts";
+import type { CopilotAgent } from "./ai/copilot-agent.ts";
 import { CODES } from "./data/codeset.ts";
 import { CATEGORY_LABEL, CLINICIANS, DENIAL_INDEX, ORGANIZATION, PAYERS, USERS, clinicianById } from "./data/reference.ts";
 import type { AuditEvent, Claim, Denial, DocumentationQuery, Encounter, Notification, Patient, PriorAuth, Remittance, Role, User } from "./domain/types.ts";
 import { dashboard, forecast, reconciliation, reconciliationWorkbook } from "./services/analytics.ts";
 import type { Actor } from "./services/audit.ts";
 import type { Platform } from "./services/platform.ts";
+import type { DenialAutopilot } from "./services/denial-autopilot.ts";
+import type { Proposals } from "./services/proposals.ts";
+import type { RegulatorWatch } from "./services/regulator-watch.ts";
 import { AppError } from "./util.ts";
 
 type Env = { Variables: { user: User; actor: Actor } };
@@ -29,10 +33,12 @@ const CAN: Record<string, Role[]> = {
   audit: ["admin", "finance"],
   demo: ["admin", "biller", "finance"],
   reset: ["admin"],
+  rules: ["admin"],
 };
 
 export interface AppDeps {
   platform: Platform;
+  agents: { proposals: Proposals; autopilot: DenialAutopilot; copilot: CopilotAgent; regulatorWatch: RegulatorWatch };
   reset: () => Promise<unknown>;
   releaseRemittances: () => Promise<{ released: number }>;
   accessKey?: string;
@@ -44,19 +50,38 @@ const maskPatient = (p: Patient) => {
 };
 
 export function createApi(deps: AppDeps) {
-  const { platform } = deps;
+  const { platform, agents } = deps;
   const { store, org } = platform;
   const api = new Hono<Env>();
 
   const tooLarge = { onError: (c: any) => c.json({ error: "Request too large" }, 413) };
   const smallBody = bodyLimit({ maxSize: 2 * 1024 * 1024, ...tooLarge });
-  // Scanned pages arrive as base64 images, so /ocr gets a larger ceiling than every other route.
-  api.use("*", (c, next) => (c.req.path.endsWith("/ocr") ? next() : smallBody(c, next)));
+  // Scanned pages arrive as base64 images, so the image routes get larger ceilings.
+  const imageRoute = (path: string) => path.endsWith("/ocr") || path.endsWith("/public/explain-bill");
+  api.use("*", (c, next) => (imageRoute(c.req.path) ? next() : smallBody(c, next)));
   api.use("/ocr", bodyLimit({ maxSize: 24 * 1024 * 1024, ...tooLarge }));
+  api.use("/public/explain-bill", bodyLimit({ maxSize: 10 * 1024 * 1024, ...tooLarge }));
 
   // Public, no-login patient share page (minimal data, expiring token).
   api.get("/share/:token", async (c) => c.json(await platform.sharedView(c.req.param("token"))));
   api.get("/health", async (c) => c.json({ ok: true, ai: platform.llm.label, ocr: platform.llm.ocr.label, gateway: platform.gateway.name, org: ORGANIZATION.name }));
+
+  // Public bill explainer: no login, so each visitor gets a small number of reads per hour.
+  const billLimiter = rateLimiter(6, 60 * 60 * 1000);
+  api.post("/public/explain-bill", async (c) => {
+    const visitor = c.req.header("x-forwarded-for")?.split(",")[0].trim() || c.req.header("x-real-ip") || remoteAddress(c) || "local";
+    if (!billLimiter(visitor)) throw new AppError("You've explained several bills in the last hour. Please try again a little later.", 429);
+    const input = await body(
+      c,
+      z.object({
+        pages: z
+          .array(z.string().regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/, "Please upload a photo (PNG, JPEG or WebP) or a PDF").max(4_000_000, "That photo is too large; please use a smaller picture"))
+          .min(1)
+          .max(3, "Please upload at most 3 pages"),
+      }),
+    );
+    return c.json(await platform.explainBill(input.pages));
+  });
 
   // Demo sign-in screen: the seeded accounts a visitor can choose from (no secrets, synthetic org).
   api.get("/accounts", (c) => c.json({ users: USERS.map(({ id, name, role }) => ({ id, name, role })), organization: ORGANIZATION.name }));
@@ -225,7 +250,8 @@ export function createApi(deps: AppDeps) {
     const denials = await store.find<Denial>(org, "denials", { claimId: claim.id });
     const priorAuths = await store.find<PriorAuth>(org, "prior_auths", { patientId: claim.patientId });
     const audit = await platform.audit.forEntity(org, claim.id);
-    return c.json({ claim, patient: maskPatient(patient), note: encounter?.note, denials, priorAuths, audit, xml: platform.claimXml(claim, patient).replace(/784-\d{4}-\d{7}-\d/g, patient.emiratesIdMasked) });
+    const payerRisk = claim.historical ? [] : await platform.payerIntel.risksFor(claim);
+    return c.json({ claim, payerRisk, patient: maskPatient(patient), note: encounter?.note, denials, priorAuths, audit, xml: platform.claimXml(claim, patient).replace(/784-\d{4}-\d{7}-\d/g, patient.emiratesIdMasked) });
   });
   const ClaimPatch = z.object({
     diagnoses: z.array(z.object({ code: z.string(), type: z.enum(["principal", "secondary"]), description: z.string().default("") })).optional(),
@@ -279,6 +305,33 @@ export function createApi(deps: AppDeps) {
     return c.json(answer);
   });
 
+  // Agent copilot: picks a tool, answers with cards; drafting appeals only creates proposals.
+  api.post("/copilot/agent", allow("read"), async (c) => {
+    const input = await body(c, z.object({ question: z.string().min(3).max(500) }));
+    const answer = await agents.copilot.ask(input.question, c.get("actor"), { propose: CAN.denials.includes(c.get("user").role) });
+    await platform.audit.record(org, c.get("actor"), "copilot.agent", "copilot", answer.tool, undefined, { question: input.question, tool: answer.tool, sql: answer.sql, cards: answer.cards.length });
+    return c.json(answer);
+  });
+
+  // ------------------------------------------------------------------ Proposals (approval inbox)
+  const ProposalStatus = z.enum(["awaiting_review", "approved", "declined", "failed", "expired"]).optional();
+  api.get("/proposals", allow("read"), async (c) => c.json(await agents.proposals.list(ProposalStatus.parse(c.req.query("status")))));
+  api.post("/proposals/:id/decide", allow("denials"), async (c) => {
+    const input = await body(c, z.object({ hash: z.string().length(64), approve: z.boolean(), reason: z.string().max(500).optional() }));
+    return c.json(await agents.proposals.decide(c.req.param("id"), input.hash, input.approve, c.get("actor"), input.reason));
+  });
+
+  // ------------------------------------------------------------------ Denial Autopilot
+  api.post("/autopilot/start", allow("denials"), async (c) => c.json(await agents.autopilot.start(c.get("actor"))));
+  api.get("/autopilot", allow("read"), async (c) => {
+    const [job, worklist] = await Promise.all([agents.autopilot.latest(), agents.autopilot.worklist()]);
+    return c.json({ job, ready: worklist.length, readyAmount: Math.round(worklist.reduce((s, d) => s + d.amount, 0) * 100) / 100 });
+  });
+
+  // ------------------------------------------------------------------ Regulator Watch
+  api.get("/rules", allow("read"), async (c) => c.json(await agents.regulatorWatch.status()));
+  api.post("/rules/check", allow("rules"), async (c) => c.json(await agents.regulatorWatch.check(c.get("actor"))));
+
   // ------------------------------------------------------------------ Front desk
   api.get("/patients", allow("read"), async (c) => {
     const q = (c.req.query("q") ?? "").toLowerCase();
@@ -327,6 +380,26 @@ export function createApi(deps: AppDeps) {
   api.post("/demo/reset", allow("reset"), async (c) => c.json(await deps.reset()));
 
   return api;
+}
+
+/** Fixed-window counter per key (in memory; one API process). */
+function rateLimiter(limit: number, windowMs: number) {
+  const hits = new Map<string, { count: number; resetAt: number }>();
+  return (key: string) => {
+    const now = Date.now();
+    const entry = hits.get(key);
+    if (!entry || entry.resetAt <= now) {
+      if (hits.size > 5000) for (const [k, v] of hits) if (v.resetAt <= now) hits.delete(k);
+      hits.set(key, { count: 1, resetAt: now + windowMs });
+      return true;
+    }
+    entry.count++;
+    return entry.count <= limit;
+  };
+}
+
+function remoteAddress(c: { env: unknown }): string | undefined {
+  return (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)?.incoming?.socket?.remoteAddress;
 }
 
 export function createApp(deps: AppDeps, options: { allowedOrigins: string[]; mockGateway?: Hono }) {

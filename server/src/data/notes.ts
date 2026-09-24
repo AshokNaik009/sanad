@@ -192,7 +192,7 @@ Neurological examination normal. BP 122/80.
 Diclofenac 75 mg given as an intramuscular injection in clinic.
 Assessment: Tension-type headache.
 Plan: Sleep hygiene, hydration, simple analgesia; return if worsening.`,
-    gold: fixed("R51.9", ["99203", "96372", "DRG-0877-0002"]),
+    gold: fixed("R51.9", ["99203", "96372", "G93-5627-01796-01"]),
   },
   {
     key: "derm-eczema",

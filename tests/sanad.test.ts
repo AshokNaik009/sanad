@@ -1,15 +1,25 @@
 // Runs fully offline: embedded Postgres in memory + the deterministic AI engine.
 import assert from "node:assert/strict";
+import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { after, describe, test } from "node:test";
 import { sampleCode } from "../server/src/ai/coding.ts";
 import { guardSql } from "../server/src/ai/copilot.ts";
 import { extractJson } from "../server/src/ai/llm.ts";
 import { createApp } from "../server/src/app.ts";
 import { bootstrap } from "../server/src/bootstrap.ts";
+import { lookupCode } from "../server/src/data/codeset.ts";
 import { BASE_NOTES, renderNote } from "../server/src/data/notes.ts";
+import { refDrugCount, reloadRefData } from "../server/src/data/ref-data.ts";
+import { REF_DIR, SOURCES } from "../server/src/data/ref-import.ts";
+import { DENIAL_INDEX, rebuildDenialCodes } from "../server/src/data/reference.ts";
 import { createStore } from "../server/src/db.ts";
 import type { Claim, Denial } from "../server/src/domain/types.ts";
+import { scrubClaim } from "../server/src/rules/scrubber.ts";
+import { RegulatorWatch } from "../server/src/services/regulator-watch.ts";
 import { validateClaimXml } from "../server/src/xml/claim-xml.ts";
+import { validateXml } from "../server/src/xml/xsd-check.ts";
 
 const call = async (path: string, init: { user?: string; json?: unknown; method?: string } = {}) => {
   const res = await app.request(`/api${path}`, {
@@ -23,7 +33,7 @@ const call = async (path: string, init: { user?: string; json?: unknown; method?
 // Top-level setup: seeded once, shared by all suites.
 const ctx = await bootstrap({ aiMode: "sample", adjudicationDelaySeconds: 0, databaseUrl: undefined }, await createStore({}));
 await ctx.reset({ historical: 300 });
-const app = createApp({ platform: ctx.platform, reset: () => ctx.reset({ historical: 300 }), releaseRemittances: ctx.releaseRemittances }, { allowedOrigins: [] });
+const app = createApp({ platform: ctx.platform, agents: ctx.agents, reset: () => ctx.reset({ historical: 300 }), releaseRemittances: ctx.releaseRemittances }, { allowedOrigins: [] });
 after(async () => {
   await ctx.store.close();
 });
@@ -165,5 +175,145 @@ describe("Security and guardrails", () => {
   });
   test("model replies are parsed even with think blocks and fences", () => {
     assert.deepEqual(extractJson('<think>hmm</think>```json\n{"a":1}\n```'), { a: 1 });
+  });
+});
+
+describe("Regulator data (DOH snapshots)", () => {
+  test("denial codes are the official list, and every code the demo uses is on it", async () => {
+    assert.ok(DENIAL_INDEX.size >= 50, `${DENIAL_INDEX.size} active codes`);
+    assert.equal(DENIAL_INDEX.get("AUTH-001")?.text, "Prior approval is required and was not obtained");
+    const all = await ctx.store.list<Denial>(ctx.platform.org, "denials");
+    const unknown = [...new Set(all.map((d) => d.code))].filter((c) => !DENIAL_INDEX.has(c));
+    assert.deepEqual(unknown, []);
+  });
+  test("drug codes resolve from the DOH drug list with regulated prices", () => {
+    const amox = lookupCode("A54-4064-00334-01");
+    assert.equal(amox?.type, "DRUG");
+    assert.match(amox?.description ?? "", /PENAMOX/);
+    assert.ok(refDrugCount() > 15000);
+    assert.equal(lookupCode("DRG-0418-0001"), undefined, "no invented drug codes remain");
+  });
+  test("claims validate against the official ClaimSubmission schema; broken ones do not", async () => {
+    const claim = (await ctx.store.list<Claim>(ctx.platform.org, "claims")).find((c) => c.seed?.errors?.length === 0) as Claim;
+    const xml = ctx.platform.claimXml(claim, await ctx.platform.patient(claim.patientId));
+    assert.deepEqual(validateXml(xml, "ClaimSubmission", { regulator: "DHA" }), []);
+    const missing = validateXml(xml.replace(/<EmiratesIDNumber>[^<]*<\/EmiratesIDNumber>\s*/, ""), "ClaimSubmission", { regulator: "DHA" });
+    assert.ok(missing.some((e) => /EmiratesIDNumber is required/.test(e.message)));
+    const reordered = validateXml(xml.replace(/(<Gross>[^<]*<\/Gross>)(\s*)(<PatientShare>[^<]*<\/PatientShare>)/, "$3$2$1"), "ClaimSubmission", { regulator: "DHA" });
+    assert.ok(reordered.some((e) => /out of order/.test(e.message)));
+    const badType = validateXml(xml.replace(/(<Encounter>[\s\S]*?<Type>)\d+(<\/Type>)/, "$177$2"), "ClaimSubmission", { regulator: "DHA" });
+    assert.ok(badType.some((e) => /not an allowed value/.test(e.message)));
+  });
+  test("the official DOH remittance layout validates and ingests", async () => {
+    const sample = `<?xml version="1.0" encoding="utf-8"?><Remittance.Advice><Header><SenderID>A001</SenderID><ReceiverID>MF1100</ReceiverID><TransactionDate>06/01/2009 15:00</TransactionDate><RecordCount>1</RecordCount><DispositionFlag>PRODUCTION</DispositionFlag></Header><Claim><ID>123</ID><IDPayer>456</IDPayer><PaymentReference>45621</PaymentReference><Activity><Start>01/01/2009 13:00</Start><Type>3</Type><Code>0031T</Code><Quantity>1</Quantity><Net>4500</Net><Clinician>GD6476</Clinician><PriorAuthorizationID>1235</PriorAuthorizationID><Gross>5000</Gross><PatientShare>500</PatientShare><PaymentAmount>4500</PaymentAmount></Activity></Claim></Remittance.Advice>`;
+    assert.deepEqual(validateXml(sample, "RemittanceAdvice"), []);
+    const res = await app.request("/api/remittances/ingest", { method: "POST", headers: { "X-Sanad-User": "u_omar" }, body: sample });
+    assert.equal(res.status, 200);
+    const ra = (await res.json()) as any;
+    assert.equal(ra.lineCount, 1);
+    assert.equal(ra.matched, 0, "an unknown claim is kept as unmatched, not guessed");
+  });
+  test("drug lines billed above the regulated public price are blocked", async () => {
+    const claim = structuredClone((await ctx.store.list<Claim>(ctx.platform.org, "claims")).find((c) => c.seed?.errors?.length === 0) as Claim);
+    claim.activities.push({ id: "act_drug", codeType: "DRUG", code: "A54-4064-00334-01", description: "Amoxicillin", quantity: 2, gross: 20, patientShare: 0, net: 20 });
+    const patient = await ctx.platform.patient(claim.patientId);
+    const issues = scrubClaim(claim, { patient, priorAuths: [], otherClaims: [], today: ctx.platform.today() }).issues;
+    const ceiling = issues.find((i) => i.rule === "PRICE-DRUG-CEILING");
+    assert.ok(ceiling, "AED 10 per capsule is above the AED 1.18 public price");
+    assert.equal(ceiling?.autoFix?.value, 1.18);
+  });
+});
+
+describe("Agents: proposals, autopilot, copilot tools", () => {
+  test("autopilot drafts open denials into proposals; nothing is sent until approved", async () => {
+    const start = await call("/autopilot/start", { json: {} });
+    assert.equal(start.status, 200);
+    await ctx.agents.autopilot.settled();
+    const job = (await call("/autopilot")).body.job;
+    assert.equal(job.status, "done");
+    assert.ok(job.proposed >= 1);
+    const pending = (await call("/proposals?status=awaiting_review")).body as any[];
+    assert.equal(pending.length, job.proposed);
+    for (const p of pending) assert.equal((await ctx.platform.denial(p.entityId)).status, "open", "no appeal is sent by the job");
+
+    const again = await call("/autopilot/start", { json: {} });
+    await ctx.agents.autopilot.settled();
+    assert.equal(again.body.total, 0, "a second run does not duplicate proposals");
+
+    const p = pending[0];
+    assert.equal((await call(`/proposals/${p.id}/decide`, { user: "u_omar", json: { hash: p.contentHash, approve: true } })).status, 403, "finance cannot send appeals");
+    assert.equal((await call(`/proposals/${p.id}/decide`, { json: { hash: "0".repeat(64), approve: true } })).status, 409, "stale content is refused");
+    const approved = await call(`/proposals/${p.id}/decide`, { json: { hash: p.contentHash, approve: true } });
+    assert.equal(approved.body.status, "approved");
+    assert.equal((await ctx.platform.denial(p.entityId)).status, "resubmitted");
+    const declined = await call(`/proposals/${pending[1].id}/decide`, { json: { hash: pending[1].contentHash, approve: false, reason: "Will call the insurer first" } });
+    assert.equal(declined.body.status, "declined");
+    assert.equal((await ctx.platform.denial(pending[1].entityId)).status, "open");
+    const actions = (await call("/audit", { user: "u_admin" })).body.map((e: any) => e.action);
+    for (const a of ["autopilot.start", "proposal.create", "proposal.approve", "proposal.decline"]) assert.ok(actions.includes(a), a);
+  });
+  test("copilot routes to tools and returns cards; drafting respects roles", async () => {
+    const code = (await call("/copilot/agent", { json: { question: "What does MNEC-003 mean?" } })).body;
+    assert.equal(code.tool, "explain_denial_code");
+    assert.equal(code.cards[0].text, "Service is not clinically indicated based on good clinical practice");
+    const work = (await call("/copilot/agent", { json: { question: "Which denials should I work first?" } })).body;
+    assert.equal(work.tool, "worklist");
+    assert.ok(work.cards.every((c: any) => c.type === "denial"));
+    const denied = (await call("/copilot/agent", { user: "u_omar", json: { question: "Draft appeals for Nahr denials" } })).body;
+    assert.equal(denied.tool, "draft_appeals");
+    assert.equal(denied.cards.length, 0);
+    const data = (await call("/copilot/agent", { user: "u_omar", json: { question: "Which payer underpays us most?" } })).body;
+    assert.equal(data.tool, "ask_data");
+    assert.ok(data.sql);
+  });
+  test("payer memory flags services an insurer keeps denying, unless the claim already addresses it", async () => {
+    const base = (await ctx.store.list<Claim>(ctx.platform.org, "claims")).find((c) => c.payerId === "payer_gulf" && !c.historical) as Claim;
+    const history = Array.from({ length: 16 }, (_, i): Claim => ({
+      ...structuredClone(base),
+      id: `hist_risk_${i}`,
+      historical: true,
+      serviceDate: ctx.platform.today(),
+      activities: [{ id: `a${i}`, codeType: "CPT", code: "96372", description: "", quantity: 1, gross: 60, patientShare: 0, net: 60, paid: i < 8 ? 0 : 60, denialCode: i < 8 ? "AUTH-001" : undefined }],
+    }));
+    await ctx.store.putMany(ctx.platform.org, "claims", history);
+    ctx.platform.payerIntel.invalidate();
+    const probe: Claim = { ...structuredClone(base), activities: [{ id: "p1", codeType: "CPT", code: "96372", description: "", quantity: 1, gross: 60, patientShare: 0, net: 60 }] };
+    const [risk] = await ctx.platform.payerIntel.risksFor(probe);
+    assert.equal(risk.category, "auth");
+    assert.ok(risk.denialRate >= 0.25, `rate ${risk.denialRate}`);
+    assert.equal(risk.mitigated, false);
+    probe.activities[0].priorAuthNumber = "PA-1";
+    assert.equal((await ctx.platform.payerIntel.risksFor(probe))[0].mitigated, true);
+    for (const h of history) await ctx.store.remove(ctx.platform.org, "claims", h.id);
+    ctx.platform.payerIntel.invalidate();
+  });
+  test("the public bill explainer is rate limited per visitor", async () => {
+    const hit = () => app.request("/api/public/explain-bill", { method: "POST", headers: { "Content-Type": "application/json", "X-Forwarded-For": "203.0.113.9" }, body: "{}" });
+    for (let i = 0; i < 6; i++) assert.equal((await hit()).status, 422);
+    assert.equal((await hit()).status, 429);
+  });
+});
+
+describe("Regulator Watch", () => {
+  test("detects a changed list, saves it, reloads the rules and reports what changed", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "sanad-ref-"));
+    await cp(REF_DIR, dir, { recursive: true });
+    const current = JSON.parse(await readFile(join(dir, "denial-codes.json"), "utf8")) as { code: string; text: string }[];
+    const next = [...current.filter((d) => d.code !== "COPY-001").map((d) => (d.code === "AUTH-001" ? { ...d, text: `${d.text} (revised)` } : d)), { code: "AUTH-099", text: "New test code", type: "Authorization", effective: "2026-09-01" }];
+    const source = { ...SOURCES[0], parse: async () => ({ content: `${JSON.stringify(next, null, 1)}\n`, records: next.length }) };
+    const watch = new RegulatorWatch(ctx.platform, { dir, sources: [source], fetcher: async () => new Uint8Array() });
+    try {
+      const check = await watch.check({ id: "u_admin", role: "admin" });
+      const change = check.changes[0];
+      assert.equal(change.status, "updated");
+      assert.deepEqual([change.added, change.removed, change.changed], [["AUTH-099"], ["COPY-001"], ["AUTH-001"]]);
+      assert.equal(DENIAL_INDEX.get("AUTH-099")?.category, "auth", "rules reload in place");
+      assert.equal((await watch.check({ id: "u_admin", role: "admin" })).changes[0].status, "unchanged");
+    } finally {
+      reloadRefData();
+      rebuildDenialCodes();
+      await rm(dir, { recursive: true, force: true });
+    }
+    assert.equal(DENIAL_INDEX.get("AUTH-099"), undefined);
   });
 });

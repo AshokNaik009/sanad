@@ -1,0 +1,86 @@
+{
+ "publisher": "Department of Health Abu Dhabi (Shafafiya)",
+ "fetchedAt": "2026-09-24T08:16:19.475Z",
+ "sources": [
+  {
+   "name": "denial-codes",
+   "label": "Denial codes",
+   "url": "https://www.doh.gov.ae/-/media/Feature/shafifya/dictionary/Codes.ashx",
+   "file": "denial-codes.json",
+   "records": 57,
+   "contentSha256": "6c933ee003f4445081c32afa939a536638ab99800a7f65c583b2bb243948c75a",
+   "downloadedBytes": 191155,
+   "fetchedAt": "2026-09-24T08:16:14.964Z"
+  },
+  {
+   "name": "drugs",
+   "label": "Drug list and public prices",
+   "url": "https://shafafiyaportal.doh.gov.ae/dictionary/DrugCoding/Drugs.xlsx",
+   "file": "drugs.json",
+   "records": 21056,
+   "contentSha256": "2d6606fc8cf887decdc3d31cc3791e7f3e700cc12b9608860da45bad4d007b7a",
+   "downloadedBytes": 1885918,
+   "fetchedAt": "2026-09-24T08:16:17.953Z"
+  },
+  {
+   "name": "ref-prices",
+   "label": "Drug reference prices",
+   "url": "https://www.doh.gov.ae/-/media/Feature/shafifya/dictionary/Reference-Price-List-All-Phases.ashx",
+   "file": "ref-prices.json",
+   "records": 4275,
+   "contentSha256": "9fd1ebd3501ea5060559eece757c03957bcf0325ca9fc8cb01b34b8b502f8772",
+   "downloadedBytes": 606351,
+   "fetchedAt": "2026-09-24T08:16:18.943Z"
+  },
+  {
+   "name": "xsd:ClaimSubmission",
+   "label": "ClaimSubmission schema",
+   "url": "https://www.doh.gov.ae/-/media/Feature/shafifya/XSDs/ClaimSubmission.ashx",
+   "file": "xsd/ClaimSubmission.xsd",
+   "records": 59,
+   "contentSha256": "b8dc9376273fbf378f1b06f809e70e1b85b299c117cd5d4dd603d510c706726d",
+   "downloadedBytes": 6637,
+   "fetchedAt": "2026-09-24T08:16:19.010Z"
+  },
+  {
+   "name": "xsd:RemittanceAdvice",
+   "label": "RemittanceAdvice schema",
+   "url": "https://www.doh.gov.ae/-/media/Feature/shafifya/XSDs/RemittanceAdvice.ashx",
+   "file": "xsd/RemittanceAdvice.xsd",
+   "records": 31,
+   "contentSha256": "b8b7d35c14c28964fbb2524157f138c2b53ee03215286cbc3150f71023c700e5",
+   "downloadedBytes": 3647,
+   "fetchedAt": "2026-09-24T08:16:19.204Z"
+  },
+  {
+   "name": "xsd:PriorRequest",
+   "label": "PriorRequest schema",
+   "url": "https://www.doh.gov.ae/-/media/Feature/shafifya/XSDs/PriorRequest.ashx",
+   "file": "xsd/PriorRequest.xsd",
+   "records": 45,
+   "contentSha256": "ccae70cf1b7ada6b846e89f266d762d0c28aca5a102b5cf4ad74ddd5b65be066",
+   "downloadedBytes": 6284,
+   "fetchedAt": "2026-09-24T08:16:19.272Z"
+  },
+  {
+   "name": "xsd:PriorAuthorization",
+   "label": "PriorAuthorization schema",
+   "url": "https://www.doh.gov.ae/-/media/Feature/shafifya/XSDs/PriorAuthorization.ashx",
+   "file": "xsd/PriorAuthorization.xsd",
+   "records": 34,
+   "contentSha256": "8bef5dffe1f017cf42f2ead86dfe6698a0b9dad871dd269675db1e91ce15e225",
+   "downloadedBytes": 5161,
+   "fetchedAt": "2026-09-24T08:16:19.342Z"
+  },
+  {
+   "name": "xsd:CommonTypes",
+   "label": "CommonTypes schema",
+   "url": "https://www.doh.gov.ae/-/media/Feature/shafifya/PTE/XSD/CommonTypes.ashx",
+   "file": "xsd/CommonTypes.xsd",
+   "records": 153,
+   "contentSha256": "c303f04438127b0a7595ba52960c7b0967131714bbf189ced740d01392fc1eb0",
+   "downloadedBytes": 76835,
+   "fetchedAt": "2026-09-24T08:16:19.464Z"
+  }
+ ]
+}

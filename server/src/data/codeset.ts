@@ -1,7 +1,8 @@
-// Demo code set: a small, real subset of ICD-10-CM, CPT and HCPCS plus two fictional
-// regulator drug codes. `patterns` drive the offline (sample) coding engine; every
+// Demo code set: a small, real subset of ICD-10-CM, CPT and HCPCS; drug codes come from the
+// imported DOH drug list. `patterns` drive the offline (sample) coding engine; every
 // suggestion from any engine is filtered against this table (PRD M2.2).
 import type { CodeType } from "../domain/types.ts";
+import { drugLabel, refDrug } from "./ref-data.ts";
 
 export interface CodeEntry {
   code: string;
@@ -48,6 +49,12 @@ const cpt = (
   supportedBy,
   ...extra,
 });
+
+/** A DOH drug code with its description taken from the imported list. */
+const drug = (code: string, plain: string, patterns: RegExp[], fallbackTariff: number): CodeEntry => {
+  const d = refDrug(code);
+  return { code, type: "DRUG", description: d ? drugLabel(d) : code, plain, active: true, patterns, tariff: d?.unitPrice ?? fallbackTariff, supportedBy: [] };
+};
 
 const MSK = ["M", "S"];
 
@@ -123,16 +130,24 @@ export const CODES: CodeEntry[] = [
   cpt("81003", "Urinalysis, automated, without microscopy", "Urine test", 50, [/urinalysis|urine dipstick/i], ["N39", "E11", "R30", "Z00"]),
   cpt("87880", "Rapid streptococcus antigen test", "Rapid strep throat test", 90, [/rapid strep/i], ["J02", "J03", "J06"]),
   cpt("36415", "Collection of venous blood by venipuncture", "Blood draw", 30, [/venipuncture|blood (was )?drawn/i]),
-  // Drugs (HCPCS and fictional regulator drug codes)
+  // Drugs: HCPCS plus two real DOH drug codes (tariff = DOH unit price to public, per unit).
   { code: "J3301", type: "HCPCS", description: "Injection, triamcinolone acetonide, 10 mg", plain: "Steroid injection medicine", active: true, patterns: [/triamcinolone/i], tariff: 45, supportedBy: [] },
-  { code: "DRG-0418-0001", type: "DRUG", description: "Amoxicillin 500 mg capsules (21)", plain: "Antibiotic (amoxicillin)", active: true, patterns: [/amoxicillin/i], tariff: 35, supportedBy: [] },
-  { code: "DRG-0877-0002", type: "DRUG", description: "Diclofenac sodium 75 mg/3 mL injection", plain: "Anti-inflammatory injection", active: true, patterns: [/diclofenac/i], tariff: 25, supportedBy: [] },
+  drug("A54-4064-00334-01", "Antibiotic (amoxicillin)", [/amoxicillin/i], 1.18),
+  drug("G93-5627-01796-01", "Anti-inflammatory injection", [/diclofenac/i], 4.6),
 ];
 
 export const CODE_INDEX = new Map(CODES.map((c) => [c.code, c]));
 
+/** Any other DOH drug code resolves from the imported drug list. */
+function drugEntry(code: string): CodeEntry | undefined {
+  const d = refDrug(code);
+  if (!d) return undefined;
+  return { code: d.code, type: "DRUG", description: drugLabel(d), plain: `${d.generic} (${d.name})`, active: d.status !== "Deleted", tariff: d.unitPrice, supportedBy: [] };
+}
+
 export function lookupCode(code: string): CodeEntry | undefined {
-  return CODE_INDEX.get(code.trim().toUpperCase());
+  const key = code.trim().toUpperCase();
+  return CODE_INDEX.get(key) ?? drugEntry(key);
 }
 
 /** A code is usable only if it exists in the loaded code set and is active. */

@@ -4,6 +4,7 @@ import { lookupCode } from "./data/codeset.ts";
 import { BASE_NOTES, type BaseNote, type Side, renderNote } from "./data/notes.ts";
 import {
   CLINICIANS,
+  COMMENT_DRIVEN_CODES,
   DENIAL_INDEX,
   ORGANIZATION,
   PAYERS,
@@ -345,15 +346,15 @@ export async function seed(platform: Platform, gatewayAdmin: (path: string, body
     { key: "physio-knee-oa", payer: "payer_nahr", deny: "AUTH-001", settledDaysAgo: 18, noAuth: true, only: "97110" },
     { key: "physio-shoulder", payer: "payer_nahr", side: "left", deny: "AUTH-001", settledDaysAgo: 6, noAuth: true, only: "97140" },
     { key: "ortho-knee-injection", payer: "payer_saffron", side: "left", deny: "AUTH-001", settledDaysAgo: 27, noAuth: true },
-    { key: "physio-low-back", payer: "payer_gulf", deny: "CODE-020", settledDaysAgo: 8, only: "97110", mutate: (c) => { c.diagnoses[0] = { code: "M54.5", type: "principal", description: "Low back pain" }; } },
-    { key: "gp-asthma", payer: "payer_saffron", deny: "CODE-010", settledDaysAgo: 15, mutate: (c) => { c.activities.push({ ...c.activities[0], id: `${c.activities[0].id}_b`, code: "93000", description: lookupCode("93000")?.description ?? "", gross: 150 }); } },
+    { key: "physio-low-back", payer: "payer_gulf", deny: "CODE-013", settledDaysAgo: 8, only: "97110", mutate: (c) => { c.diagnoses[0] = { code: "M54.5", type: "principal", description: "Low back pain" }; } },
+    { key: "gp-asthma", payer: "payer_saffron", deny: "MNEC-004", settledDaysAgo: 15, mutate: (c) => { c.activities.push({ ...c.activities[0], id: `${c.activities[0].id}_b`, code: "93000", description: lookupCode("93000")?.description ?? "", gross: 150 }); } },
     { key: "derm-acne", payer: "payer_nahr", deny: "PRCE-001", settledDaysAgo: 10, mutate: (c) => { c.activities[0] = { ...c.activities[0], code: "99214", description: lookupCode("99214")?.description ?? "", gross: 350 }; } },
     { key: "gp-hypertension", payer: "payer_saffron", deny: "PRCE-001", settledDaysAgo: 20, mutate: (c) => { c.activities[0] = { ...c.activities[0], code: "99214", description: lookupCode("99214")?.description ?? "", gross: 350 }; } },
     { key: "gp-uti", payer: "payer_gulf", deny: "ELIG-001", settledDaysAgo: 14, expired: true, only: "99213" },
     { key: "derm-eczema", payer: "payer_nahr", deny: "ELIG-001", settledDaysAgo: 25, expired: true },
     { key: "gp-diabetes", payer: "payer_nahr", deny: "TIME-001", settledDaysAgo: 5, lateService: true, only: "99213" },
-    { key: "physio-shoulder", payer: "payer_gulf", deny: "DOC-001", code: "97140", comment: "Please provide the physiotherapy plan of care and session notes.", settledDaysAgo: 16 },
-    { key: "physio-knee-oa", payer: "payer_saffron", side: "left", deny: "OTHR-999", code: "97110", comment: "Frequency of physiotherapy sessions exceeds policy without documented functional improvement.", settledDaysAgo: 11 },
+    { key: "physio-shoulder", payer: "payer_gulf", deny: "MNEC-004", code: "97140", comment: "Please provide the physiotherapy plan of care and session notes.", settledDaysAgo: 16 },
+    { key: "physio-knee-oa", payer: "payer_saffron", side: "left", deny: "CLAI-012", code: "97110", comment: "Frequency of physiotherapy sessions exceeds policy without documented functional improvement.", settledDaysAgo: 11 },
   ];
   const denialClaims: Claim[] = [];
   for (const d of denialPlan) {
@@ -371,7 +372,7 @@ export async function seed(platform: Platform, gatewayAdmin: (path: string, body
     recalcTotals(claim, patient);
     const scripted: GatewayScript = { id: claim.id, activities: {}, comment: d.comment, hold: true, settledDaysAgo: d.settledDaysAgo };
     if (d.code) scripted.activities[d.code] = { denialCode: d.deny };
-    if (d.deny === "OTHR-999" || d.deny === "DOC-001") scripted.comment = d.comment;
+    if (COMMENT_DRIVEN_CODES.has(d.deny)) scripted.comment = d.comment;
     scripts.push(scripted);
     denialClaims.push(claim);
     heldBatch.push(claim);
@@ -482,12 +483,12 @@ function historical(count: number, patients: Patient[], today: string, r: Return
   const categoryCodes: Record<string, string[]> = {
     auth: ["AUTH-001", "AUTH-003"],
     medical_necessity: ["MNEC-003", "MNEC-005"],
-    coding: ["CODE-010", "CODE-014", "CODE-020"],
+    coding: ["CODE-010", "CODE-014", "CODE-013", "MNEC-004"],
     pricing: ["PRCE-001", "PRCE-010"],
     eligibility: ["ELIG-001", "ELIG-005"],
     duplicate: ["DUPL-001"],
     timeliness: ["TIME-001"],
-    documentation: ["DOC-001"],
+    documentation: ["TIME-002", "CLAI-014"],
   };
   const catWeights: [string, number][] = [["auth", 0.26], ["medical_necessity", 0.2], ["coding", 0.18], ["pricing", 0.12], ["eligibility", 0.1], ["documentation", 0.08], ["duplicate", 0.04], ["timeliness", 0.02]];
   const pickCat = () => {

@@ -12,7 +12,7 @@ Turns a clinical note into a coded, scrubbed, regulator-format claim, submits it
 
 ![Sanad landing page](docs/landing.png)
 
-> **Hackathon MVP. Synthetic data only.** The gateway is a spec-faithful mock of DHA eClaimLink / DOH Shafafiya. Denial codes, price lists and payers are fictional configuration. Do not load real patient data.
+> **Hackathon MVP. Synthetic patients only.** Regulator reference data is real: the official DOH Abu Dhabi denial codes, drug list with regulated prices, drug reference prices and e-claim XSDs, imported from the public Shafafiya dictionary (`npm run import-ref`). Payers, contracts and patients are fictional, and the gateway is a spec-faithful mock of DHA eClaimLink / DOH Shafafiya. Do not load real patient data.
 
 ## Why Sanad
 
@@ -61,7 +61,8 @@ The goal: **every claim clean the first time, every denial worked within 48 hour
 | **J3 · Denial → resubmission** | Remittance advice is parsed and each denied line is classified: a lookup table first, AI only for free-text payer comments. The worklist is ranked by **amount × recovery probability × deadline urgency**. AI drafts field fixes and a justification in which **every sentence cites the note**; sentences without a verifiable quote are blocked. Resubmit as a correction or internal complaint, or write off with a mandatory reason. |
 | **J4 · Reconciliation** | Every remittance line is auto-matched to its claim and activity. Underpayments against the contract price are flagged. Excel export has Paid, Denied and Variance tabs. |
 | **J5 · Cash and insights** | A/R by payer and age, first-pass rate, denial rate by payer, doctor and code, AED at risk, a 30/60/90-day forecast with its assumptions shown, and financing readiness. The ⌘K copilot answers questions as **read-only, tenant-scoped SQL you can inspect**. |
-| **J6 · Patient transparency** | Cost estimate from plan benefits, plus an expiring, no-login, plain-language bill page (first name only). |
+| **J6 · Patient transparency** | Cost estimate from plan benefits, an expiring, no-login, plain-language bill page (first name only), and a public **bill explainer**: a patient photographs any bill and gets each line, any denial code and the questions to ask their insurer in plain language (rate-limited, no login). |
+| **J7 · Agents that act, people who approve** | **Denial Autopilot** drafts a cited appeal for every open denial in the background and queues each one as a **proposal**; nothing is sent until a biller approves that exact content (hash-checked, audited). The ⌘K copilot routes questions to tools (data questions, denial-code explanations, claim checks, worklist, drafting appeals) and answers with cards. **Regulator Watch** re-checks the DOH lists daily, reloads changed rules in place and reports which open claims they affect. **Payer memory** learns from adjudicated claims which services each insurer denies well above its usual rate, and why, and shows it on the claim before submission. |
 
 | AI coding with evidence | Scrubber with one-click fixes |
 | --- | --- |
@@ -95,7 +96,7 @@ Switch roles with the user picker (Aisha Billing, Rahul Coder, Dr. Fatima, Omar 
 | `LLM_PROVIDERS` | Provider chain tried in order, default `groq,openrouter` (`anthropic` also supported). Any failure falls through to the next provider, then to the offline engine, so the demo never dead-ends. |
 | `GROQ_API_KEY`, `GROQ_MODEL` | Groq (default `openai/gpt-oss-120b`, JSON mode). |
 | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_PROVIDER_ORDER` | OpenRouter fallback (e.g. `minimax/minimax-m3` with provider order `GMICloud`). |
-| `GROQ_VISION_MODELS`, `OPENROUTER_VISION_MODELS` | OCR chain for scanned notes, tried model by model in provider order. Defaults: Groq `qwen/qwen3.8-27b`, then OpenRouter `google/gemma-4-31b-it:free`, `google/gemma-4-26b-a4b-it:free`, `nvidia/nemotron-nano-12b-v2-vl:free`. A 429/5xx gets one short retry before falling through. PDFs with a text layer are read in the browser with no AI. |
+| `GROQ_VISION_MODELS`, `OPENROUTER_VISION_MODELS` | OCR chain for scanned notes, tried model by model in provider order. Defaults: Groq `qwen/qwen3.8-27b`, then OpenRouter `google/gemma-4-31b-it:free` and `google/gemma-4-26b-a4b-it:free`. A 429/5xx gets one short retry before falling through. PDFs with a text layer are read in the browser with no AI. |
 | `SANAD_ENCRYPTION_KEY` | 32 random bytes, base64, for AES-256-GCM of Emirates IDs. Required in production. |
 | `SANAD_ACCESS_KEY` | Optional shared bearer key in front of the API. |
 | `GATEWAY_URL` | Point the adapter at a real gateway proxy. Unset = in-process mock gateway. |
@@ -120,9 +121,19 @@ Switch roles with the user picker (Aisha Billing, Rahul Coder, Dr. Fatima, Omar 
 | Remittance lines auto-matched | 95/95 | 100% |
 | Seeded underpayments flagged | 5/5 | 5/5 |
 
-The offline engine also clears every target (19/20 principal; its one miss is a note that doesn't state the diabetes type, which correctly raises a doctor query instead). `npm test` runs 14 end-to-end and guardrail tests offline.
+The offline engine also clears every target (19/20 principal; its one miss is a note that doesn't state the diabetes type, which correctly raises a doctor query instead). `npm test` runs 24 end-to-end and guardrail tests offline, including the real DOH data, official-schema validation, autopilot-to-approval, copilot tools, payer memory and Regulator Watch.
 
 > The free Groq tier allows 8,000 tokens per minute, and bulk drafting will hit it. Sanad then falls through to OpenRouter and the offline engine, and caches every model response, so a rehearsed demo replays even without network.
+
+## Moat
+
+| Layer | What Sanad has | Why it compounds |
+| --- | --- | --- |
+| Regulator truth | Official DOH denial codes (57 active), 21,056 drugs with regulated prices, 4,275 reference prices and the official ClaimSubmission / RemittanceAdvice / PriorRequest XSDs, validated structurally (order, cardinality, enumerations, formats) | Rules come from the regulator's own files, re-checked daily; a claim that passes here matches the official format |
+| Payer memory | Denial rate and top reason per insurer × service, learned from every remittance | Each clinic's history makes the next claim cleaner; a new competitor starts with none |
+| Approval-gated agents | Autopilot, copilot and proposals with content hashes and a hash-chained audit trail | Automation a compliance officer can sign off on |
+
+DHA's eClaimLink code lists (Dubai Drug Codes, DHA denial codes, clinician and facility registers) need a registered eClaimLink account; the import is built so those can be added as further sources once credentials exist. Dubai Pulse publishes DHA facility and professional registers through a keyed API for licence checks.
 
 ## Architecture
 
@@ -143,10 +154,12 @@ flowchart TD
 server/src/
   ai/           coding.ts · denials.ts · copilot.ts · priorauth.ts · llm.ts (provider chain + cache)
   rules/        scrubber.ts (10 families) · pricing.ts (contract prices, co-pay)
-  xml/          Claim.Submission / Resubmission / Prior.Request builders, Remittance.Advice parser, schema validator
+  xml/          Claim.Submission / Resubmission / Prior.Request builders, Remittance.Advice parser, pinned schema, xsd-check.ts (official XSDs)
   gateway/      adapter.ts (interface + HTTP) · mock-gateway.ts (scripted payer)
   services/     platform.ts (workflows) · analytics.ts (dashboard, reconciliation, forecast, xlsx) · audit.ts
   data/         codeset.ts · reference.ts (payers, denial codes) · notes.ts (20-note gold set)
+                ref-import.ts + xlsx.ts (DOH downloads) · ref-data.ts (loaded snapshots) · ref/ (committed snapshots + manifest)
+  services/     proposals.ts · denial-autopilot.ts · regulator-watch.ts · payer-intel.ts
   seed.ts       150 patients · 200 encounters · 30 seeded errors · 15 denials · 5 underpayments · 2,000 historical claims
 schemas/        claim-submission.dha-v1.json (pinned structural schema)
 web/src/        App shell (sidebar + ⌘K), pages/, charts.tsx
@@ -154,7 +167,7 @@ web/src/        App shell (sidebar + ⌘K), pages/, charts.tsx
 
 ### Built on OpenMuse patterns
 
-Sanad reuses ideas from OpenMuse, the parent repo: the Hono server layout, the `(owner, kind, id, data jsonb)` record store on PGlite or Postgres (here `owner` is the tenant), zod-validated routes with typed `AppError`s, and a durable task worker with backoff. The design follows a warm-aurora dark aesthetic: Inter and Geist Mono, glass surfaces, and keycap primary buttons.
+Sanad reuses ideas from OpenMuse, the parent repo: the Hono server layout, the `(owner, kind, id, data jsonb)` record store on PGlite or Postgres (here `owner` is the tenant), zod-validated routes with typed `AppError`s, and a durable task worker with backoff. Its agent patterns carry over too: **proposals** follow OpenMuse's ActionService (an outward action is stored with a content hash and runs only when a person approves that exact content), **Denial Autopilot** follows its durable task engine (stored job, lease, progress), **Regulator Watch** follows its page watches, and the ⌘K copilot follows its tool-card pattern. The design follows a warm-aurora dark aesthetic: Inter and Geist Mono, glass surfaces, and keycap primary buttons.
 
 ## Security and compliance posture
 
@@ -169,7 +182,7 @@ Sanad reuses ideas from OpenMuse, the parent repo: the Hono server layout, the `
 ## Deviations from the PRD (deliberate, for the build window)
 
 - **Vite + React SPA** instead of Next.js; one Node process serves the API and the built app.
-- **Structural JSON schema** in `schemas/` instead of the official XSD. Swap in the published DHA/DOH XSD before a pilot.
+- **Official DOH XSDs** are enforced alongside the pinned structural schema in `schemas/`; for a Dubai (DHA) organisation the header disposition values follow eClaimLink. DHA's own XSD needs an eClaimLink account.
 - **MVP identity** via a user picker plus optional shared key; replace with SSO before a pilot.
 - **OCR via vision LLMs, not a dedicated OCR engine**: photos and scanned PDFs go to `POST /api/ocr` and the vision-model chain above; the transcript is shown for review before the encounter is saved. Notes can also be pasted, loaded as `.txt`, or pushed as a FHIR `Encounter` (`POST /api/fhir/Encounter`, idempotent on the resource id).
 
@@ -181,6 +194,8 @@ Sanad reuses ideas from OpenMuse, the parent repo: the Hono server layout, the `
 | `npm run build` / `npm start` | Build the web app / serve API and app |
 | `npm run reset-demo [-- --release]` | Reseed the demo (optionally land the payer remittance run immediately) |
 | `npm run eval` | PRD evaluation metrics |
+| `npm run import-ref` | Download and parse the DOH reference lists and XSDs into `server/src/data/ref` |
+| `npm run ocr-probe` | Check which vision models in the OCR chain respond |
 | `npm test` | Offline end-to-end and guardrail tests |
 | `npm run typecheck` | Server and web type checks |
 

@@ -1,11 +1,12 @@
 // Deterministic pre-submission scrubber (PRD M3). Ten rule families; each issue carries rule,
 // severity, field and fix. Rules decide; AI never overrides a blocking rule.
 import { EXCLUSIVE_PAIRS, lookupCode } from "../data/codeset.ts";
-import { authRequired, payerById } from "../data/reference.ts";
+import { ORGANIZATION, authRequired, payerById } from "../data/reference.ts";
 import type { Claim, Patient, PriorAuth, ScrubIssue } from "../domain/types.ts";
 import { ageOn, daysBetween, sha256 } from "../util.ts";
 import { validateClaimXml } from "../xml/claim-xml.ts";
-import { contractPrice } from "./pricing.ts";
+import { validateXml } from "../xml/xsd-check.ts";
+import { contractPrice, drugUnitCeiling } from "./pricing.ts";
 
 export interface ScrubContext {
   patient: Patient;
@@ -230,6 +231,19 @@ export function scrubClaim(claim: Claim, ctx: ScrubContext): ScrubResult {
         fix: `Bill at the contract price (AED ${agreed.toFixed(2)}).`,
         autoFix: { kind: "set_price", activityId: a.id, value: agreed },
       });
+    
+    // Regulated drug prices: never bill above the published unit price to the public.
+    const ceiling = a.codeType === "DRUG" ? drugUnitCeiling(a.code) : undefined;
+    if (ceiling !== undefined && unit > ceiling + 0.005)
+      add({
+        rule: "PRICE-DRUG-CEILING",
+        family: "pricing",
+        severity: "blocking",
+        field: `Activity[${a.code}].Gross`,
+        message: `AED ${unit.toFixed(2)} per unit is above the regulated public price of AED ${ceiling.toFixed(2)} for ${a.description || a.code}.`,
+        fix: `Bill at or below AED ${ceiling.toFixed(2)} per unit.`,
+        autoFix: { kind: "set_price", activityId: a.id, value: ceiling },
+      });
   }
 
   // 7. Duplicates
@@ -331,15 +345,17 @@ export function scrubClaim(claim: Claim, ctx: ScrubContext): ScrubResult {
 
   // 10. Schema
   if (ctx.xml) {
-    const errors = validateClaimXml(ctx.xml);
+    // Official regulator schema first, then the stricter pinned house rules (ID formats).
+    const errors = validateXml(ctx.xml, "ClaimSubmission", { regulator: ORGANIZATION.regulator });
+    for (const e of validateClaimXml(ctx.xml)) if (!errors.some((x) => x.path === e.path)) errors.push(e);
     for (const e of errors.slice(0, 5))
       add({
         rule: "SCHEMA",
         family: "schema",
         severity: "blocking",
         field: e.path,
-        message: `XML schema: ${e.message}`,
-        fix: "Correct the field so the claim validates against the pinned DHA claim schema.",
+        message: `Claim format: ${e.message}`,
+        fix: "Correct the field so the claim matches the official e-claim format.",
       });
   }
 

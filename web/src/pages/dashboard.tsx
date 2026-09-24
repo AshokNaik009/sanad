@@ -2,6 +2,7 @@ import { useState } from "react";
 import { aed, pct, useApi } from "../api";
 import { AGE_RAMP, BarList, LineChart, PAYER_COLORS, StackedBars } from "../charts";
 import { Badge, Button, Card, ErrorBox, Loading, PageHeader, Stat, Table, inputClass } from "../ui";
+import { AutopilotCard, RulesCard } from "./agents";
 
 const filterClass = inputClass.replace("w-full", "w-auto");
 
@@ -11,6 +12,7 @@ export function Dashboard({ onAsk }: { onAsk: () => void }) {
   const summary = useApi<any>(`/analytics/summary${qs ? `?${qs}` : ""}`);
   const forecast = useApi<any>("/analytics/forecast");
   const ref = useApi<any>("/reference");
+  const me = useApi<any>("/me");
   const d = summary.data;
   const [tab, setTab] = useState<"payer" | "doctor" | "code">("payer");
 
@@ -41,6 +43,11 @@ export function Dashboard({ onAsk }: { onAsk: () => void }) {
             <Stat label="First-pass acceptance" value={pct(d.kpis.firstPassRate)} sub={`${d.kpis.claimsAdjudicated.toLocaleString()} claims adjudicated`} />
             <Stat label="Denial rate" value={pct(d.kpis.denialRate)} sub="Claims with ≥1 denied line" />
             <Stat label="AI acceptance" value={d.kpis.aiAcceptance == null ? "—" : pct(d.kpis.aiAcceptance, 0)} sub={d.kpis.aiAcceptance != null && d.kpis.aiAcceptance < 0.6 ? "Below 60% alert threshold" : "Suggestions accepted without edit"} />
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-5">
+            <div className="lg:col-span-3"><AutopilotCard role={me.data?.user.role} /></div>
+            <div className="lg:col-span-2"><RulesCard role={me.data?.user.role} /></div>
           </div>
 
           <div className="grid gap-5 lg:grid-cols-5">

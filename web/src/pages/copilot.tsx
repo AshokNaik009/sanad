@@ -1,8 +1,10 @@
-// The copilot as a command bar (⌘K): dark glass, warm caret, suggestions with shortcut chips,
-// and answers that always expose the read-only SQL and the rows they came from.
+// The copilot as a command bar (⌘K): dark glass, warm caret, suggestions with shortcut chips.
+// Data answers expose the read-only SQL and rows; tool answers render as cards, and drafted
+// appeals go to the approval inbox instead of being sent.
 import { useEffect, useRef, useState } from "react";
 import { api, useApi } from "../api";
 import { AiTag, cx } from "../ui";
+import { AgentCards } from "./agents";
 
 interface Turn {
   question: string;
@@ -12,6 +14,7 @@ interface Turn {
   fields?: string[];
   error?: string;
   engine?: string;
+  cards?: any[];
 }
 
 export function CopilotPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -38,7 +41,7 @@ export function CopilotPanel({ open, onClose }: { open: boolean; onClose: () => 
     setBusy(true);
     setTurns((t) => [...t, { question }]);
     try {
-      const res = await api("/copilot/query", { json: { question } });
+      const res = await api("/copilot/agent", { json: { question } });
       setTurns((t) => t.map((x, i) => (i === t.length - 1 ? { ...x, ...res } : x)));
     } catch (e) {
       setTurns((t) => t.map((x, i) => (i === t.length - 1 ? { ...x, error: (e as Error).message } : x)));
@@ -68,7 +71,7 @@ export function CopilotPanel({ open, onClose }: { open: boolean; onClose: () => 
             ref={input}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Ask about denials, underpayments, A/R, deadlines…"
+            placeholder="Ask about money, or: draft appeals for Nahr denials…"
             aria-label="Ask the claims copilot"
             className="flex-1 bg-transparent text-[15px] text-white caret-[#ff6b4a] placeholder:text-muted focus:outline-none"
           />
@@ -100,9 +103,10 @@ export function CopilotPanel({ open, onClose }: { open: boolean; onClose: () => 
                 ) : (
                   <div className="active-row rounded-xl px-3.5 py-3 text-[14px] leading-relaxed text-white">
                     {t.answer}
+                    <AgentCards cards={t.cards ?? []} />
                     {t.sql && (
                       <details className="mt-2 text-[12px]">
-                        <summary className="cursor-pointer text-muted">Read-only query · {t.rows?.length ?? 0} source row(s){t.engine === "sample" ? " · offline engine" : ""}</summary>
+                        <summary className="cursor-pointer text-muted">Read-only query · {t.rows?.length ?? 0} source row(s)</summary>
                         <pre className="mt-1.5 overflow-x-auto rounded-lg bg-black/40 p-2.5 font-mono text-[11px] text-ink-2">{t.sql}</pre>
                         {!!t.rows?.length && (
                           <div className="mt-1.5 overflow-x-auto">
@@ -126,7 +130,7 @@ export function CopilotPanel({ open, onClose }: { open: boolean; onClose: () => 
           <span>↑↓ navigate</span>
           <span>↵ ask</span>
           <span>esc dismiss</span>
-          <span className="ml-auto">read-only · tenant-scoped</span>
+          <span className="ml-auto">nothing is sent without your approval</span>
         </div>
       </div>
     </div>

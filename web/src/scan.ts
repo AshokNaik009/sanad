@@ -1,4 +1,4 @@
-// Turns an uploaded file into note text. Plain text is read as-is; a PDF with a real text layer is
+// Turns an uploaded file into note text or page images. Plain text is read as-is; a PDF with a real text layer is
 // extracted locally (no AI); photos and scanned PDFs are rendered to page images and sent to /ocr,
 // where the server walks its vision-model fallback chain.
 import { api } from "./api";
@@ -10,6 +10,11 @@ const MIN_CHARS_PER_PAGE = 40; // below this a PDF page is treated as a scan
 export interface ScanResult {
   text: string;
   /** Short, plain note shown under the note box; empty when there is nothing worth saying. */
+  source: string;
+}
+
+export interface ImageScanResult {
+  pages: string[]; // data URLs
   source: string;
 }
 
@@ -27,6 +32,19 @@ export async function readNoteFile(file: File, progress: Progress): Promise<Scan
     return ocr([page], progress);
   }
   throw new Error("Unsupported file. Use a .txt, PDF, PNG, JPEG or WebP.");
+}
+
+export async function readImageFile(file: File, progress: Progress, maxPages = MAX_PAGES): Promise<ImageScanResult> {
+  const name = file.name.toLowerCase();
+  if (/^image\/(png|jpeg|webp)$/.test(file.type)) {
+    progress("Preparing image…");
+    const page = await imageToDataUrl(file);
+    return { pages: [page], source: "Image ready for analysis." };
+  }
+  if (file.type === "application/pdf" || name.endsWith(".pdf")) {
+    return readPdfImages(file, progress, maxPages);
+  }
+  throw new Error("Unsupported file. Use a PDF, PNG, JPEG or WebP for image analysis.");
 }
 
 async function ocr(pages: string[], progress: Progress): Promise<ScanResult> {
@@ -84,6 +102,29 @@ async function readPdf(file: File, progress: Progress): Promise<ScanResult> {
   const result = await ocr(pages, progress);
   if (doc.numPages > MAX_PAGES) result.source += ` Only the first ${MAX_PAGES} pages were read.`;
   return result;
+}
+
+async function readPdfImages(file: File, progress: Progress, maxPages: number): Promise<ImageScanResult> {
+  progress("Opening PDF…");
+  const pdfjs = await import("pdfjs-dist");
+  const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
+  pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  const count = Math.min(doc.numPages, maxPages);
+
+  const pages: string[] = [];
+  for (let i = 1; i <= count; i++) {
+    progress(`Rendering page ${i} of ${count}…`);
+    const page = await doc.getPage(i);
+    const base = page.getViewport({ scale: 1 });
+    const viewport = page.getViewport({ scale: Math.min(3, MAX_EDGE / Math.max(base.width, base.height)) });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    await page.render({ canvas, viewport }).promise;
+    pages.push(canvas.toDataURL("image/jpeg", 0.85));
+  }
+  return { pages, source: doc.numPages > maxPages ? `Only the first ${maxPages} pages were read.` : "" };
 }
 
 async function imageToDataUrl(file: File): Promise<string> {

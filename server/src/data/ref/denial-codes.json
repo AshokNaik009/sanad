@@ -1,0 +1,344 @@
+[
+ {
+  "code": "AUTH-001",
+  "text": "Prior approval is required and was not obtained",
+  "type": "Authorization",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "AUTH-003",
+  "text": "PriorAuthorizationNumber is invalid",
+  "type": "Authorization",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "AUTH-004",
+  "text": "Service(s) is (are) performed outside authorization validity date",
+  "type": "Authorization",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "AUTH-005",
+  "text": "Claim information is inconsistent with pre-certified/authorized services",
+  "type": "Authorization",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "AUTH-006",
+  "text": "High alert Drug to drug interaction / Drug combination is contra-indicated",
+  "type": "Authorization",
+  "effective": "2012-10-01"
+ },
+ {
+  "code": "AUTH-007",
+  "text": "Drug Duplicate Therapy",
+  "type": "Authorization",
+  "effective": "2012-10-01"
+ },
+ {
+  "code": "AUTH-008",
+  "text": "Inapropriate Drug Dose",
+  "type": "Authorization",
+  "effective": "2012-10-01"
+ },
+ {
+  "code": "AUTH-009",
+  "text": "Prescription out of date.",
+  "type": "Authorization",
+  "effective": "2012-10-01"
+ },
+ {
+  "code": "AUTH-010",
+  "text": "Authorization request overlaps or is within the period of another paid claim or approved authorization.",
+  "type": "Administrative information",
+  "effective": "2013-01-01"
+ },
+ {
+  "code": "AUTH-011",
+  "text": "Waiting period on pre-existing / specific conditions",
+  "type": "Authorization",
+  "effective": "2013-01-01"
+ },
+ {
+  "code": "BENX-002",
+  "text": "Benefit maximum for this time period or occurrence has been reached",
+  "type": "Benefit expiration",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "BENX-005",
+  "text": "Annual limit/sublimit amount exceeded",
+  "type": "Benefit expiration",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "CLAI-008",
+  "text": "Claim overlaps inpatient stay. Resubmit only those services rendered outside the inpatient stay",
+  "type": "Administrative information",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "CLAI-009",
+  "text": "Date of birth follows the date of service",
+  "type": "Administrative information",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "CLAI-010",
+  "text": "Date of death precedes the date of service",
+  "type": "Administrative information",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "CLAI-012",
+  "text": "Submission not compliant with contractual agreement between provider & payer",
+  "type": "Administrative information",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "CLAI-014",
+  "text": "Claim not compliant with Resubmission type (used only for resubmissions)",
+  "type": "Administrative information",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "CLAI-015",
+  "text": "Missing Service Codes in a DRG claim",
+  "type": "Administrative information",
+  "effective": "2013-01-01"
+ },
+ {
+  "code": "CLAI-016",
+  "text": "Incorrect billing regime",
+  "type": "Administrative information",
+  "effective": "2013-01-01"
+ },
+ {
+  "code": "CLAI-017",
+  "text": "Services not available on direct biling",
+  "type": "Administrative information",
+  "effective": "2013-01-01"
+ },
+ {
+  "code": "CLAI-018",
+  "text": "Claims Recalled By Provider",
+  "type": "Administrative information",
+  "effective": "2013-01-01"
+ },
+ {
+  "code": "CODE-010",
+  "text": "Activity/diagnosis inconsistent with clinician specialty",
+  "type": "Clinical information",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "CODE-011",
+  "text": "Incorrect DRG calculated",
+  "type": "Clinical information",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "CODE-012",
+  "text": "Encounter type inconsistent with service(s) / diagnosis",
+  "type": "Clinical information",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "CODE-013",
+  "text": "Invalid principal diagnosis (for example E-codes)",
+  "type": "Clinical information",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "CODE-014",
+  "text": "Activity/diagnosis is inconsistent with the patient's age/gender",
+  "type": "Clinical information",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "CODE-015",
+  "text": "Activity/diagnosis is inconsistent with the provider type",
+  "type": "Clinical information",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "COPY-001",
+  "text": "Deductible/co-pay not collected from member",
+  "type": "Copay",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "DUPL-001",
+  "text": "Authorization request/Claim is a duplicate based on service codes and dates",
+  "type": "Duplicate",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "DUPL-002",
+  "text": "Payment already made for same/similar service within set time frame",
+  "type": "Duplicate",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "ELIG-001",
+  "text": "Patient is not a covered member",
+  "type": "Eligibility",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "ELIG-005",
+  "text": "Services requested/performed after the last date of coverage",
+  "type": "Eligibility",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "ELIG-006",
+  "text": "Services requested/performed prior to the effective date of coverage",
+  "type": "Eligibility",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "ELIG-007",
+  "text": "Services requested/performed by a non-network provider",
+  "type": "Eligibility",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "MNEC-003",
+  "text": "Service is not clinically indicated based on good clinical practice",
+  "type": "Medical Necessity",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "MNEC-004",
+  "text": "Service is not clinically indicated based on good clinical practice, without additional supporting diagnoses/activities",
+  "type": "Medical Necessity",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "MNEC-005",
+  "text": "Service/supply may be appropriate, but too frequent",
+  "type": "Medical Necessity",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "MNEC-006",
+  "text": "Alternative service should be/should have been utilized",
+  "type": "Medical Necessity",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "NCOV-001",
+  "text": "Diagnosis(es) is (are) not covered",
+  "type": "Non-coverage",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "NCOV-002",
+  "text": "Pre-existing conditions are not covered",
+  "type": "Non-coverage",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "NCOV-0026",
+  "text": "Drug not listed in formulary",
+  "type": "Non-coverage",
+  "effective": "2012-10-01"
+ },
+ {
+  "code": "NCOV-003",
+  "text": "Service(s) is (are) not covered",
+  "type": "Non-coverage",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "NCOV-025",
+  "text": "Service(s) is (are) not performed (used after audit)",
+  "type": "Non-coverage",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "PRCE-001",
+  "text": "Calculation discrepancy",
+  "type": "Price",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "PRCE-002",
+  "text": "Payment is included in the allowance for another service",
+  "type": "Price",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "PRCE-003",
+  "text": "Recovery of Payment",
+  "type": "Price",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "PRCE-006",
+  "text": "Consultation within free follow up period",
+  "type": "Price",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "PRCE-007",
+  "text": "Service has no contract price",
+  "type": "Price",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "PRCE-008",
+  "text": "Multiple procedure payment rules incorrectly applied",
+  "type": "Price",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "PRCE-010",
+  "text": "Use bundled code",
+  "type": "Price",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "PYBK-003",
+  "text": "Co-pay Payback/Reversal",
+  "type": "Pay-back",
+  "effective": "2025-06-01"
+ },
+ {
+  "code": "TIME-001",
+  "text": "Time limit for submission has expired",
+  "type": "Timely filing",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "TIME-002",
+  "text": "Requested additional information was not received or was not received within time limit",
+  "type": "Timely filing",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "TIME-003",
+  "text": "Appeal procedures not followed or time limits not met",
+  "type": "Timely filing",
+  "effective": "2008-01-01"
+ },
+ {
+  "code": "TKBK-001",
+  "text": "Correction take-back",
+  "type": "Take-back",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "TKBK-002",
+  "text": "Post-audit take-back",
+  "type": "Take-back",
+  "effective": "2010-08-01"
+ },
+ {
+  "code": "TKBK-003",
+  "text": "Take back co-payments",
+  "type": "Take-back",
+  "effective": "2025-06-01"
+ }
+]

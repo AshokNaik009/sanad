@@ -2,6 +2,7 @@ import { lookupCode } from "../data/codeset.ts";
 import { PRICE_OVERRIDES, payerById } from "../data/reference.ts";
 import type { Activity, Claim, Patient } from "../domain/types.ts";
 import { round2 } from "../util.ts";
+import { refDrug } from "../data/ref-data.ts";
 
 /** Facility chargemaster price (what the PMS bills by default). */
 export function chargemasterPrice(code: string): number {
@@ -43,4 +44,10 @@ export function recalcTotals(claim: Claim, patient: Patient): Claim {
   claim.patientShare = round2(share);
   claim.net = round2(gross - share);
   return claim;
+}
+
+/** DOH maximum unit price to the public for a drug code; undefined when the drug is not listed. */
+export function drugUnitCeiling(code: string): number | undefined {
+  const price = refDrug(code)?.unitPrice;
+  return price && price > 0 ? price : undefined;
 }

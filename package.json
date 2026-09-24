@@ -16,7 +16,9 @@
     "reset-demo": "tsx scripts/reset-demo.ts",
     "eval": "tsx scripts/eval.ts",
     "test": "tsx --test tests/*.test.ts",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p web/tsconfig.json"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web/tsconfig.json",
+    "ocr-probe": "tsx scripts/ocr-probe.ts",
+    "import-ref": "tsx scripts/import-reference.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
@@ -25,6 +27,7 @@
     "exceljs": "^4.4.0",
     "fast-xml-parser": "^5.11.1",
     "hono": "^4.13.8",
+    "jszip": "^3.10.1",
     "pg": "^8.23.0",
     "zod": "^4.6.5"
   },

@@ -153,6 +153,9 @@ export const EXAMPLE_QUESTIONS = [
   "Which denials are at risk of missing the deadline?",
   "What are the top denial reasons?",
   "How much A/R is outstanding by payer?",
+  "Which denials should I work first?",
+  "Draft appeals for Nahr denials",
+  "What does MNEC-003 mean?",
 ];
 
 const SqlOutput = z.object({ sql: z.string(), purpose: z.string() });

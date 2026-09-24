@@ -39,7 +39,7 @@ export function visionChain(config: Config, env: NodeJS.ProcessEnv = process.env
     if (provider === "groq" && env.GROQ_API_KEY)
       for (const model of list(env.GROQ_VISION_MODELS ?? env.GROQ_VISION_MODEL, "qwen/qwen3.8-27b")) out.push({ provider, model });
     if (provider === "openrouter" && env.OPENROUTER_API_KEY)
-      for (const model of list(env.OPENROUTER_VISION_MODELS, "google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free,nvidia/nemotron-nano-12b-v2-vl:free"))
+      for (const model of list(env.OPENROUTER_VISION_MODELS, "google/gemma-4-31b-it:free,google/gemma-4-26b-a4b-it:free"))
         out.push({ provider, model });
   }
   return out;

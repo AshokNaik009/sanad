@@ -5,8 +5,12 @@ import { type Store, createStore } from "./db.ts";
 import { HttpGatewayAdapter } from "./gateway/adapter.ts";
 import { createMockGateway } from "./gateway/mock-gateway.ts";
 import { type SeedOptions, seed } from "./seed.ts";
+import { CopilotAgent } from "./ai/copilot-agent.ts";
 import { AuditLog } from "./services/audit.ts";
+import { DenialAutopilot } from "./services/denial-autopilot.ts";
 import { Platform } from "./services/platform.ts";
+import { Proposals } from "./services/proposals.ts";
+import { RegulatorWatch } from "./services/regulator-watch.ts";
 
 const IN_PROCESS = "http://mock-gateway.internal";
 
@@ -28,6 +32,13 @@ export async function bootstrap(overrides: Partial<Config> = {}, store?: Store) 
   const llm = new Llm(config, db);
   const audit = new AuditLog(db);
   const platform = new Platform(db, config, llm, gateway, audit);
+  const proposals = new Proposals(platform);
+  const agents = {
+    proposals,
+    autopilot: new DenialAutopilot(platform, proposals),
+    copilot: new CopilotAgent(platform, proposals),
+    regulatorWatch: new RegulatorWatch(platform),
+  };
 
   const gatewayAdmin = async (path: string, body: unknown) => {
     const res = await fetcher(`${baseUrl}${path}`, {
@@ -42,11 +53,11 @@ export async function bootstrap(overrides: Partial<Config> = {}, store?: Store) 
     const res = await fetcher(`${baseUrl}/admin/release`, { method: "POST" });
     return (await res.json()) as { released: number };
   };
-  return { config, store: db, platform, mockGateway, reset, releaseRemittances };
+  return { config, store: db, platform, agents, mockGateway, reset, releaseRemittances };
 }
 
 /** Background task engine: remittance polling, prior-auth status, deadline alerts, with backoff. */
-export function startWorker(platform: Platform, intervalMs = 4000) {
+export function startWorker(platform: Platform, intervalMs = 4000, proposalsHousekeeping?: () => Promise<unknown>) {
   let stopped = false;
   let failures = 0;
   let timer: NodeJS.Timeout | undefined;
@@ -55,6 +66,7 @@ export function startWorker(platform: Platform, intervalMs = 4000) {
       await platform.pollRemittances();
       await platform.refreshPriorAuths();
       await platform.deadlineAlerts();
+      await proposalsHousekeeping?.();
       failures = 0;
     } catch (error) {
       failures++;

@@ -6,6 +6,7 @@ import { CodingQueue, EncounterPage } from "./pages/coding";
 import { CopilotPanel } from "./pages/copilot";
 import { Dashboard } from "./pages/dashboard";
 import { DenialDetail, DenialsPage } from "./pages/denials";
+import { ExplainPage } from "./pages/explain";
 import { FrontDesk } from "./pages/frontdesk";
 import { Inbox } from "./pages/inbox";
 import { Landing } from "./pages/landing";
@@ -73,6 +74,7 @@ const NAV: { key: string; label: string; icon: ReactNode; roles?: string[] }[] =
 export function App() {
   const route = useRoute();
   if (route[0] === "share" && route[1]) return <SharePage token={route[1]} />;
+  if (route[0] === "explain") return <ExplainPage />;
   if (!route[0]) return <Landing />;
   if (route[0] === "login") return <LoginPage next="/dashboard" />;
   // Any app page without a signed-in account shows sign-in, then returns to that page.

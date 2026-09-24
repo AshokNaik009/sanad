@@ -2,6 +2,7 @@ import { useState } from "react";
 import { go } from "../App";
 import { aed, api, date, useApi } from "../api";
 import { Badge, Button, Card, Dialog, Empty, ErrorBox, EvidenceNote, Loading, PageHeader, ScoreGauge, StatusBadge, Table, Timeline, cx, useToast } from "../ui";
+import { PayerMemory } from "./agents";
 
 const FILTERS: [string, string][] = [["draft", "Needs fixes"], ["scrubbed", "Ready to submit"], ["acknowledged", "With payer"], ["partially_paid", "Partially paid"], ["denied", "Denied"], ["paid", "Paid"], ["", "All"]];
 
@@ -97,7 +98,7 @@ export function ClaimDetail({ id }: { id: string }) {
   const [share, setShare] = useState<string | null>(null);
   if (res.error) return <ErrorBox error={res.error} />;
   if (!res.data) return <Loading />;
-  const { claim, patient, note, denials, audit, xml } = res.data;
+  const { claim, payerRisk, patient, note, denials, audit, xml } = res.data;
   const editable = claim.status === "draft" || claim.status === "scrubbed";
   const blocking = (claim.issues ?? []).filter((i: any) => i.severity === "blocking");
   const act = async (key: string, fn: () => Promise<any>, ok?: string) => {
@@ -156,6 +157,8 @@ export function ClaimDetail({ id }: { id: string }) {
               <p className="mt-3 text-[13px] text-good-ink">No issues: this claim passes all ten rule families.</p>
             )}
           </Card>
+
+          {editable && <PayerMemory risks={payerRisk} />}
 
           <Card title="Claim lines">
             <div className="mb-3 flex flex-wrap gap-2">

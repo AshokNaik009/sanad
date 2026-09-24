@@ -3,7 +3,7 @@
 // through the adapter, so the platform cannot shortcut the exchange.
 import { Hono } from "hono";
 import { lookupCode } from "../data/codeset.ts";
-import { DENIAL_INDEX, PAYERS, authRequired } from "../data/reference.ts";
+import { COMMENT_DRIVEN_CODES, DENIAL_INDEX, PAYERS, authRequired } from "../data/reference.ts";
 import type { Store } from "../db.ts";
 import { contractPrice } from "../rules/pricing.ts";
 import { addDays, ageOn, daysBetween, dhaDate, isoDate, newId, parseDhaDate, round2 } from "../util.ts";
@@ -155,14 +155,14 @@ export function createMockGateway(store: Store, options: { adjudicationDelaySeco
       const entry = lookupCode(a.code);
       if (!payer) return deny("ELIG-001");
       if (!member || claim.serviceDate < member.coverageStart || claim.serviceDate > member.coverageEnd) return deny("ELIG-001");
-      if (!entry || !entry.active) return deny("CODE-020");
-      if (claim.diagnoses.some((d) => !lookupCode(d)?.active)) return deny("CODE-020");
+      if (!entry || !entry.active) return deny("PRCE-007");
+      if (claim.diagnoses.some((d) => !lookupCode(d)?.active)) return deny("CODE-013");
       if (authRequired(payer, a.code)) {
         const ok = priors.some((p) => p.approvalNumber === a.priorAuth && p.codes.includes(a.code));
         if (!ok) return deny("AUTH-001");
       }
       if (entry.supportedBy?.length && !claim.diagnoses.some((d) => entry.supportedBy?.some((p) => d.startsWith(p))))
-        return deny("CODE-010");
+        return deny("MNEC-004");
       const codesToCheck = [a.code, ...claim.diagnoses];
       for (const c of codesToCheck) {
         const e = lookupCode(c);
@@ -173,7 +173,7 @@ export function createMockGateway(store: Store, options: { adjudicationDelaySeco
       if (others.some((o) => o.activities.some((x) => x.code === a.code))) return deny("DUPL-001");
       if (!claim.resubmission && lateDays > payer.submissionWindowDays) return deny("TIME-001");
       // Scripted clinical/documentation outcomes: a well-argued resubmission overturns them.
-      if (scripted?.denialCode && !(appealAccepted && ["medical_necessity", "documentation"].includes(DENIAL_INDEX.get(scripted.denialCode)?.category ?? "")))
+      if (scripted?.denialCode && !(appealAccepted && (COMMENT_DRIVEN_CODES.has(scripted.denialCode) || ["medical_necessity", "documentation"].includes(DENIAL_INDEX.get(scripted.denialCode)?.category ?? ""))))
         return deny(scripted.denialCode);
       const allowed = round2(contractPrice(payer.id, a.code) * a.quantity * (claim.resubmission ? 1 : claim.netRatio));
       // Tolerance absorbs co-pay apportionment rounding.

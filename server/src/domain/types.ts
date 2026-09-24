@@ -161,6 +161,20 @@ export interface Diagnosis {
   description: string;
 }
 
+export interface PayerRisk {
+  activityId: string;
+  code: string;
+  denialRate: number;
+  sample: number;
+  topReason: string;
+  topReasonShare: number;
+  category: DenialCategory;
+  /** The claim already addresses the usual reason (e.g. carries a prior approval). */
+  mitigated: boolean;
+  message: string;
+  advice: string;
+}
+
 export interface ScrubIssue {
   id: string;
   rule: string;
@@ -200,6 +214,8 @@ export interface Claim {
   paidAmount?: number;
   cleanClaimScore?: number;
   denialRisk?: number;
+  /** How this payer has treated these services before (payer memory). */
+  payerRisk?: PayerRisk[];
   issues?: ScrubIssue[];
   submissionId?: string;
   submittedAt?: string;
@@ -355,7 +371,7 @@ export interface AuditEvent {
 
 export interface Notification {
   id: string;
-  kind: "deadline" | "remittance" | "prior_auth" | "query";
+  kind: "deadline" | "remittance" | "prior_auth" | "query" | "approval" | "rules";
   message: string;
   entityId: string;
   createdAt: string;

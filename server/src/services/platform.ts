@@ -57,6 +57,8 @@ import {
   parseRemittanceAdvice,
 } from "../xml/claim-xml.ts";
 import type { Actor, AuditLog } from "./audit.ts";
+import { PayerIntel } from "./payer-intel.ts";
+import { z } from "zod";
 
 const SYSTEM: Actor = { id: "system", role: "system" };
 
@@ -65,6 +67,8 @@ export class Platform {
   readonly senderId = ORGANIZATION.facilityLicence;
   /** Serializes claim/remittance mutations so the worker and API never interleave on a claim. */
   private lock: Promise<unknown> = Promise.resolve();
+  /** Denial patterns learned from this clinic's adjudicated claims. */
+  readonly payerIntel = new PayerIntel(this);
 
   constructor(
     readonly store: Store,
@@ -308,7 +312,10 @@ export class Platform {
     const result = scrubClaim(claim, { patient, priorAuths, otherClaims, today: this.today(), xml });
     claim.issues = result.issues;
     claim.cleanClaimScore = result.score;
-    claim.denialRisk = result.denialRisk;
+    claim.payerRisk = await this.payerIntel.risksFor(claim);
+    // A clean claim still carries the payer's track record for these services.
+    const learned = Math.max(0, ...claim.payerRisk.filter((r) => !r.mitigated).map((r) => r.denialRate * 0.8));
+    claim.denialRisk = Number(Math.max(result.denialRisk, learned).toFixed(2));
     if (claim.status === "draft" || claim.status === "scrubbed")
       claim.status = result.issues.some((i) => i.severity === "blocking") ? "draft" : "scrubbed";
     return claim;
@@ -496,6 +503,7 @@ export class Platform {
       const parsed = parseRemittanceAdvice(xml);
       const remittance: Remittance = { id: gatewayId ?? newId("ra"), payerId: "", receivedAt: new Date().toISOString(), xml, lineCount: 0, matched: 0 };
       if (await this.store.get(this.org, "remittances", remittance.id)) return this.need<Remittance>("remittances", remittance.id);
+      this.payerIntel.invalidate();
       const historicalRecovery = await this.payerRecoveryRates();
       // Bulk-load everything the remittance touches: a few round trips instead of several per line.
       const claimIds = parsed.claims.map((c) => c.id);
@@ -871,4 +879,102 @@ export class Platform {
       expiresAt: link.expiresAt,
     };
   }
+
+  // ---------------------------------------------------------------- Public bill explainer (PRD M10.3)
+
+  /**
+   * Patient uploads a bill photo; OCR reads it, the model structures it and every code or denial
+   * code found is explained from Sanad's own tables (not the model's memory). Works without the
+   * model by pulling amounts and codes out of the transcript directly.
+   */
+  async explainBill(pages: string[]): Promise<BillExplanation> {
+    if (!this.llm.ocr.enabled) throw new AppError("We can't read bill photos right now. Please ask the clinic's billing desk to go through it with you.", 503);
+    const text = (await this.llm.ocr.read(pages).catch(() => {
+      throw new AppError("We couldn't read that photo. Try a sharper, well-lit picture of the whole bill.", 422);
+    })).text;
+    if (!text.trim() || /^\[no text\]$/i.test(text.trim())) throw new AppError("We couldn't find any text on that photo. Try a sharper, well-lit picture of the whole bill.", 422);
+
+    const model = this.llm.enabled
+      ? await this.llm
+          .structured({
+            task: "bill-explanation",
+            schema: BillSchema,
+            system:
+              "You help UAE patients understand a medical bill or insurance statement. Use only what is written in the transcript. List each billed line with its description, any code printed next to it (CPT, ICD-10, drug or denial code) and its amount in AED. Report what the insurer paid and what the patient owes if the bill states it (0 if not stated). Flags: short plain-language notes about anything unusual (a denial, a large patient share, a missing approval). Questions: 2-4 short questions the patient could ask their insurer or clinic. No medical advice.",
+            user: `Bill transcript:\n\n${text.slice(0, 8000)}`,
+            effort: "low",
+            maxTokens: 2048,
+          })
+          .catch(() => null)
+      : null;
+    const result = model ?? offlineBill(text);
+
+    const codeNotes = new Map<string, string>();
+    const lines = result.lines.map((line) => {
+      const code = line.code?.trim().toUpperCase();
+      const entry = code ? lookupCode(code) : undefined;
+      if (code && entry) codeNotes.set(code, entry.plain);
+      return { desc: line.desc, code: code || undefined, amount: line.amount, plain: entry?.plain };
+    });
+    // Denial codes are explained from the official list, wherever they appear on the bill.
+    const denials = [...new Set(text.toUpperCase().match(/\b[A-Z]{4}-\d{3,4}\b/g) ?? [])]
+      .map((code) => DENIAL_INDEX.get(code))
+      .filter((d): d is NonNullable<typeof d> => !!d)
+      .map((d) => ({ code: d.code, plain: d.plain }));
+    return {
+      lines,
+      insurerPaid: result.insurerPaid,
+      youPay: result.youPay,
+      flags: result.flags,
+      questionsToAsk: result.questionsToAsk,
+      denials,
+      readByAssistant: !!model,
+    };
+  }
+}
+
+const BillSchema = z.object({
+  lines: z.array(z.object({ desc: z.string(), code: z.string().optional(), amount: z.number() })).max(60),
+  insurerPaid: z.number(),
+  youPay: z.number(),
+  flags: z.array(z.string()).max(6),
+  questionsToAsk: z.array(z.string()).max(5),
+});
+
+export interface BillExplanation {
+  lines: { desc: string; code?: string; amount: number; plain?: string }[];
+  insurerPaid: number;
+  youPay: number;
+  flags: string[];
+  questionsToAsk: string[];
+  denials: { code: string; plain: string }[];
+  /** False when the bill was read by simple rules only (lines may be incomplete). */
+  readByAssistant: boolean;
+}
+
+/** Rule-based reading: "<description> ... <amount>" lines plus labelled totals. */
+function offlineBill(text: string): z.output<typeof BillSchema> {
+  const amountAt = (line: string) => {
+    const m = line.match(/(-?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?|-?\d+(?:\.\d{1,2})?)\s*(?:AED)?\s*$/i);
+    return m ? Number(m[1].replace(/,/g, "")) : undefined;
+  };
+  const total = (re: RegExp) => {
+    const line = text.split("\n").find((l) => re.test(l));
+    return line ? (amountAt(line) ?? 0) : 0;
+  };
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !/total|insur|patient share|you (pay|owe)|balance|due|paid/i.test(l))
+    .map((l) => ({ l, amount: amountAt(l) }))
+    .filter((x): x is { l: string; amount: number } => x.amount !== undefined && x.amount > 0)
+    .slice(0, 40)
+    .map(({ l, amount }) => ({ desc: l.replace(/[\s.:-]*(AED)?\s*[\d,]+(\.\d+)?\s*(AED)?$/i, "").trim() || l, code: l.match(/\b(\d{5}|[A-Z]\d{2}(\.\d{1,4})?|[A-Z]\d{2}-\d{4}-\d{5}-\d{2})\b/)?.[1], amount }));
+  return {
+    lines,
+    insurerPaid: total(/insur(er|ance) (paid|share|pays)|covered by/i),
+    youPay: total(/patient share|you (pay|owe)|amount due|balance/i),
+    flags: ["We read this bill with simple rules, so some lines may be missing. The clinic's billing desk can confirm the details."],
+    questionsToAsk: ["Which of these services did my insurance cover, and why?", "Is my share on this bill the co-pay my plan sets?", "Was anything denied, and can it be appealed?"],
+  };
 }

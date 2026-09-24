@@ -1,5 +1,5 @@
-// Reference configuration. Payers are fictional; denial codes follow the shape of the
-// regulator lists but must be replaced with the current published DHA/DOH lists before a pilot.
+// Reference configuration. Payers and clinicians are fictional; denial codes are the official
+// DOH list imported by `npm run import-ref` (see ref-import.ts), with Sanad's plain-language notes.
 import type {
   Clinician,
   DenialCategory,
@@ -8,6 +8,7 @@ import type {
   Specialty,
   User,
 } from "../domain/types.ts";
+import { refDenialCodes } from "./ref-data.ts";
 
 export const ORG_ID = "org_demo";
 
@@ -96,25 +97,116 @@ export interface DenialCodeConfig {
   baseRecovery: number;
 }
 
-export const DENIAL_CODES: DenialCodeConfig[] = [
-  { code: "AUTH-001", text: "Prior approval is required and was not obtained", plain: "The insurer needed to approve this service before it was done, and no approval number was on the claim.", category: "auth", baseRecovery: 0.55 },
-  { code: "AUTH-003", text: "Activity not covered by the prior approval", plain: "An approval exists, but it does not cover this exact service.", category: "auth", baseRecovery: 0.5 },
-  { code: "ELIG-001", text: "Patient is not a covered member on the date of service", plain: "The patient's insurance was not active on the visit date.", category: "eligibility", baseRecovery: 0.25 },
-  { code: "ELIG-005", text: "Service provided outside the member's network", plain: "The patient's plan does not include this clinic's network.", category: "eligibility", baseRecovery: 0.2 },
-  { code: "CODE-010", text: "Activity/diagnosis inconsistent", plain: "The diagnosis on the claim does not support the service billed.", category: "coding", baseRecovery: 0.7 },
-  { code: "CODE-014", text: "Activity/diagnosis inconsistent with patient age/gender", plain: "A code on the claim does not fit the patient's age or gender.", category: "coding", baseRecovery: 0.75 },
-  { code: "CODE-020", text: "Invalid or inactive code", plain: "A code on the claim is not valid or has been retired.", category: "coding", baseRecovery: 0.85 },
-  { code: "MNEC-003", text: "Service is not clinically indicated based on good clinical practice", plain: "The insurer thinks the service was not medically necessary from what was sent.", category: "medical_necessity", baseRecovery: 0.6 },
-  { code: "MNEC-005", text: "Service/supply may be appropriate, but too frequent", plain: "The insurer thinks this service was repeated too often.", category: "medical_necessity", baseRecovery: 0.45 },
-  { code: "PRCE-001", text: "Payment is included in the allowed amount / price exceeds agreed tariff", plain: "The amount billed was above the price agreed with the insurer.", category: "pricing", baseRecovery: 0.3 },
-  { code: "PRCE-010", text: "Unbundling: activity included in another billed activity", plain: "This service is considered part of another service on the same claim.", category: "pricing", baseRecovery: 0.35 },
-  { code: "DUPL-001", text: "Duplicate of a previously submitted claim or activity", plain: "The insurer already received this same service for this patient and date.", category: "duplicate", baseRecovery: 0.15 },
-  { code: "TIME-001", text: "Submission or resubmission after the contractual time limit", plain: "The claim reached the insurer after the deadline.", category: "timeliness", baseRecovery: 0.1 },
-  { code: "DOC-001", text: "Insufficient documentation / clinical information requested", plain: "The insurer wants more clinical information before paying.", category: "documentation", baseRecovery: 0.65 },
-  { code: "OTHR-999", text: "Other - see payer comment", plain: "The insurer gave a free-text reason; see the comment.", category: "documentation", baseRecovery: 0.4 },
-];
+/** Root-cause category for each DOH denial type; codes below override where the action differs. */
+const TYPE_CATEGORY: Record<string, DenialCategory> = {
+  Eligibility: "eligibility",
+  Authorization: "auth",
+  "Administrative information": "documentation",
+  "Benefit expiration": "eligibility",
+  "Clinical information": "coding",
+  Duplicate: "duplicate",
+  "Medical Necessity": "medical_necessity",
+  "Non-coverage": "eligibility",
+  Price: "pricing",
+  "Timely filing": "timeliness",
+  "Take-back": "pricing",
+  "Pay-back": "pricing",
+  Copay: "pricing",
+};
+
+/** Sanad's plain-language reading of each official code (the official wording is kept in `text`). */
+const GUIDE: Record<string, { plain: string; category?: DenialCategory }> = {
+  "AUTH-001": { plain: "The insurer needed to approve this service before it was done, and no approval number was on the claim." },
+  "AUTH-003": { plain: "The approval number on the claim is not valid for this patient or service." },
+  "AUTH-004": { plain: "The service was done outside the dates the approval covers." },
+  "AUTH-005": { plain: "What was billed does not match what the insurer approved." },
+  "AUTH-006": { plain: "The insurer flagged a dangerous drug combination.", category: "medical_necessity" },
+  "AUTH-007": { plain: "The insurer thinks this drug duplicates another therapy the patient is on.", category: "medical_necessity" },
+  "AUTH-008": { plain: "The insurer thinks the drug dose is not appropriate.", category: "medical_necessity" },
+  "AUTH-009": { plain: "The prescription had expired when it was dispensed." },
+  "AUTH-010": { plain: "This overlaps with another claim or approval that was already paid.", category: "duplicate" },
+  "AUTH-011": { plain: "The patient is still in the policy's waiting period for this condition." },
+  "BENX-002": { plain: "The patient has used up this benefit for the period." },
+  "BENX-005": { plain: "The patient's annual limit or sub-limit has been reached." },
+  "CLAI-008": { plain: "This visit overlaps an inpatient stay; only services outside the stay can be billed." },
+  "CLAI-009": { plain: "The date of birth on the claim is after the visit date.", category: "coding" },
+  "CLAI-010": { plain: "The claim shows a date of death before the visit date.", category: "coding" },
+  "CLAI-012": { plain: "The insurer says the claim does not follow the contract; the reason is in their comment." },
+  "CLAI-014": { plain: "The resubmission type does not fit what was changed." },
+  "CLAI-015": { plain: "Service codes are missing from an inpatient (DRG) claim.", category: "coding" },
+  "CLAI-016": { plain: "The claim was billed under the wrong billing regime." },
+  "CLAI-017": { plain: "This service is not available on direct billing with this insurer." },
+  "CLAI-018": { plain: "The claim was recalled by the clinic." },
+  "CODE-010": { plain: "The service or diagnosis does not fit the treating clinician's specialty." },
+  "CODE-011": { plain: "The inpatient grouping (DRG) on the claim was calculated incorrectly." },
+  "CODE-012": { plain: "The visit type does not fit the services or diagnosis billed." },
+  "CODE-013": { plain: "The main diagnosis code is not valid as a principal diagnosis (it may be retired or too vague)." },
+  "CODE-014": { plain: "A code on the claim does not fit the patient's age or gender." },
+  "CODE-015": { plain: "The service or diagnosis does not fit this type of facility." },
+  "COPY-001": { plain: "The co-pay or deductible was not collected from the patient." },
+  "DUPL-001": { plain: "The insurer already received this same service for this patient and date." },
+  "DUPL-002": { plain: "The insurer already paid for the same or a similar service recently." },
+  "ELIG-001": { plain: "The patient's insurance was not active on the visit date." },
+  "ELIG-005": { plain: "The visit was after the patient's cover ended." },
+  "ELIG-006": { plain: "The visit was before the patient's cover started." },
+  "ELIG-007": { plain: "The patient's plan does not include this clinic's network." },
+  "MNEC-003": { plain: "The insurer thinks the service was not medically necessary from what was sent." },
+  "MNEC-004": { plain: "The insurer needs a supporting diagnosis or more clinical information to accept this service.", category: "coding" },
+  "MNEC-005": { plain: "The insurer thinks this service was repeated too often." },
+  "MNEC-006": { plain: "The insurer thinks a different service should have been used first." },
+  "NCOV-001": { plain: "The patient's plan does not cover this diagnosis." },
+  "NCOV-002": { plain: "Pre-existing conditions are not covered by the patient's plan." },
+  "NCOV-0026": { plain: "The drug is not on the plan's formulary." },
+  "NCOV-003": { plain: "The patient's plan does not cover this service." },
+  "NCOV-025": { plain: "An audit found the service was not performed." },
+  "PRCE-001": { plain: "The amount billed does not match the agreed price." },
+  "PRCE-002": { plain: "This service is already paid as part of another service." },
+  "PRCE-003": { plain: "The insurer is recovering an earlier payment." },
+  "PRCE-006": { plain: "This consultation falls within the free follow-up period." },
+  "PRCE-007": { plain: "There is no contract price for this service with this insurer." },
+  "PRCE-008": { plain: "Multiple-procedure pricing rules were not applied correctly." },
+  "PRCE-010": { plain: "These services should be billed with a single bundled code." },
+  "PYBK-003": { plain: "A co-pay is being paid back or reversed." },
+  "TIME-001": { plain: "The claim reached the insurer after the deadline." },
+  "TIME-002": { plain: "Information the insurer asked for was not sent in time.", category: "documentation" },
+  "TIME-003": { plain: "The appeal was not made in the right way or in time." },
+  "TKBK-001": { plain: "The insurer took back a payment to correct it." },
+  "TKBK-002": { plain: "The insurer took back a payment after an audit." },
+  "TKBK-003": { plain: "The insurer took back co-payments." },
+};
+
+/** Codes whose real reason is in the payer's free-text comment, so the comment decides the category. */
+export const COMMENT_DRIVEN_CODES = new Set(["CLAI-012", "MNEC-004"]);
+
+const BASE_RECOVERY: Record<DenialCategory, number> = {
+  auth: 0.55,
+  eligibility: 0.25,
+  coding: 0.7,
+  medical_necessity: 0.6,
+  pricing: 0.3,
+  duplicate: 0.15,
+  timeliness: 0.1,
+  documentation: 0.65,
+};
+
+function buildDenialCodes(): DenialCodeConfig[] {
+  return refDenialCodes().map((d) => {
+    const guide = GUIDE[d.code];
+    const category = guide?.category ?? TYPE_CATEGORY[d.type] ?? "documentation";
+    return { code: d.code, text: d.text, plain: guide?.plain ?? d.text, category, baseRecovery: BASE_RECOVERY[category] };
+  });
+}
+
+export const DENIAL_CODES: DenialCodeConfig[] = buildDenialCodes();
 
 export const DENIAL_INDEX = new Map(DENIAL_CODES.map((d) => [d.code, d]));
+
+/** Re-reads the imported list in place (Regulator Watch), keeping existing references valid. */
+export function rebuildDenialCodes(): void {
+  DENIAL_CODES.splice(0, DENIAL_CODES.length, ...buildDenialCodes());
+  DENIAL_INDEX.clear();
+  for (const d of DENIAL_CODES) DENIAL_INDEX.set(d.code, d);
+}
 
 export const CATEGORY_LABEL: Record<DenialCategory, string> = {
   auth: "Authorisation",

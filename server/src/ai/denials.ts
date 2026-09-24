@@ -3,7 +3,7 @@
 // free-text payer comments and writing, and every factual sentence must cite the note.
 import { z } from "zod";
 import { lookupCode } from "../data/codeset.ts";
-import { CATEGORY_LABEL, DENIAL_INDEX } from "../data/reference.ts";
+import { CATEGORY_LABEL, COMMENT_DRIVEN_CODES, DENIAL_INDEX } from "../data/reference.ts";
 import type {
   Citation,
   Claim,
@@ -51,7 +51,7 @@ export async function classifyDenial(
 ): Promise<{ category: DenialCategory; plain: string; by: "lookup" | "ai" }> {
   const known = DENIAL_INDEX.get(code);
   // Lookup table first; only generic codes with free text go to the model.
-  if (known && code !== "OTHR-999") return { category: known.category, plain: known.plain, by: "lookup" };
+  if (known && !(comment && COMMENT_DRIVEN_CODES.has(code))) return { category: known.category, plain: known.plain, by: "lookup" };
   const text = comment ?? known?.text ?? code;
   if (llm.enabled) {
     const out = await llm

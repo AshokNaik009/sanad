@@ -525,13 +525,14 @@ const TRUST = [
   ["list", "Tamper-evident audit log", "Every AI suggestion and every decision is recorded and hash-chained."],
   ["lock", "Encrypted identifiers", "Emirates IDs are encrypted at rest; six roles with least-privilege access."],
   ["doc", "Regulator-format claims", "DHA eClaimLink and DOH Shafafiya-style XML, validated before it's sent."],
+  ["eye", "Patient bill explainer", "Upload any bill photo and get a plain explanation plus questions to ask your insurer."],
 ] as const;
 
 function Trust() {
   return (
     <section id="trust" className="scroll-mt-24 px-4 py-24 sm:py-28">
       <SectionHead eyebrow="Trust" title={<>AI drafts. Rules decide. <span className="text-white/45">People approve.</span></>} />
-      <div className="mx-auto grid max-w-[1080px] gap-4 sm:grid-cols-2">
+      <div className="mx-auto grid max-w-[1080px] gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {TRUST.map(([icon, title, body], i) => (
           <Reveal key={title} delay={i * 60}>
             <div className="lift flex h-full gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-6">
@@ -568,6 +569,11 @@ function Closing() {
             </button>
             <button type="button" onClick={() => go("/coding/enc_0001")} className="ghost-pill px-5 py-2.5 text-[14px] font-medium">
               Try AI coding
+            </button>
+          </div>
+          <div className="mt-6">
+            <button type="button" onClick={() => go("/explain")} className="text-[13px] text-white/50 hover:text-white">
+              Explain a bill photo →
             </button>
           </div>
         </div>

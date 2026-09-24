@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { api, date, useApi } from "../api";
 import { Button, Card, Empty, ErrorBox, Loading, PageHeader, StatusBadge, inputClass, useToast } from "../ui";
+import { ApprovalQueue } from "./agents";
 
 export function Inbox() {
   const list = useApi<any[]>("/queries");
+  const me = useApi<any>("/me");
   const toast = useToast();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -23,7 +25,11 @@ export function Inbox() {
   const done = (list.data ?? []).filter((q) => q.status !== "open");
   return (
     <div>
-      <PageHeader title="Documentation queries" sub="Specific questions from coders. One answer updates the note and re-runs coding." />
+      <PageHeader title="Inbox" sub="Appeals waiting for approval, and questions from coders to doctors." />
+      <div className="mb-6">
+        <ApprovalQueue role={me.data?.user.role} />
+      </div>
+      <h2 className="mb-3 text-[15px] font-semibold">Documentation queries</h2>
       <ErrorBox error={list.error} />
       {!list.data ? <Loading /> : (
         <div className="space-y-3">
