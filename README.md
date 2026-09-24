@@ -181,7 +181,23 @@ web/src/        App shell (sidebar + ⌘K), pages/ (incl. agents.tsx: approval q
 
 ### Built on OpenMuse patterns
 
-Sanad reuses ideas from OpenMuse, the parent repo: the Hono server layout, the `(owner, kind, id, data jsonb)` record store on PGlite or Postgres (here `owner` is the tenant), zod-validated routes with typed `AppError`s, and a durable task worker with backoff. Its agent patterns carry over too: **proposals** follow OpenMuse's ActionService (an outward action is stored with a content hash and runs only when a person approves that exact content), **Denial Autopilot** follows its durable task engine (stored job, lease, progress), **Regulator Watch** follows its page watches, and the ⌘K copilot follows its tool-card pattern. The design follows a warm-aurora dark aesthetic: Inter and Geist Mono, glass surfaces, and keycap primary buttons.
+Sanad borrows patterns from OpenMuse, the parent repo, and rebuilds them in its own stack. No OpenMuse code or CopilotKit packages are imported.
+
+| OpenMuse pattern | In Sanad |
+| --- | --- |
+| Hono server layout; zod-validated routes with typed `AppError`s | `server/src/app.ts` |
+| `(owner, kind, id, data jsonb)` record store on PGlite or Postgres | `server/src/db.ts`; `owner` is the clinic (tenant) |
+| Durable task worker with backoff | `startWorker` in `bootstrap.ts`: remittance polling, prior-auth status, deadlines, proposal clean-up |
+| **ActionService** proposals: an outward action is stored with a content hash and runs only when a person approves that exact content | `services/proposals.ts`: appeals wait in the Inbox; approval is refused if the draft changed after review; every decision is audited |
+| **Durable task engine**: stored job, lease, progress | `services/denial-autopilot.ts`: Denial Autopilot drafts every open denial into a proposal; a second run never duplicates |
+| **Page watches** | `services/regulator-watch.ts`: re-checks the DOH lists daily, reloads changed rules in place, names affected claims |
+| **Tool-calling agent with result cards** (`defineTool`, `useRenderTool`) | `ai/copilot-agent.ts` + `AgentCards`: ⌘K picks one of five tools and answers with denial, claim, code or proposal cards |
+| **Pause at a proposal** (agent write tools never act directly) | The copilot's "draft appeals" tool only creates proposals, and respects roles |
+| **Memory** | `services/payer-intel.ts`: payer memory learned from adjudicated claims (denial rate and top reason per insurer and service) |
+
+Not brought over: the CopilotKit runtime and AG-UI streaming (they don't fit the Groq → OpenRouter → offline chain without a rewrite), the multi-step tool loop (the copilot picks one tool per question), and OpenMuse's browser, email, calendar, PDF-filling and mobile features.
+
+The design follows a warm-aurora dark aesthetic: Inter and Geist Mono, glass surfaces, and keycap primary buttons.
 
 ## Security and compliance posture
 
