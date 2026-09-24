@@ -166,7 +166,14 @@ export async function createStore(
       ssl: local || url.searchParams.get("sslmode") === "disable" ? undefined : { rejectUnauthorized: false },
       // Keep Sanad tables in their own schema: Supabase exposes `public` through its REST API.
       options: `-c search_path=${SCHEMA}`,
+      // Recycle idle connections before the pooler or a network change drops them.
+      idleTimeoutMillis: 30_000,
+      keepAlive: true,
+      connectionTimeoutMillis: 15_000,
     });
+    // An idle client dying (network blip, pooler restart) emits on the pool; without a listener
+    // Node treats it as unhandled and kills the API. The pool discards that client and reconnects.
+    pool.on("error", (error) => console.warn(`[db] idle connection dropped: ${error.message}`));
     database = {
       query: async (sql, params) => pool.query(sql, params),
       readOnly: async (org, sql) => {
