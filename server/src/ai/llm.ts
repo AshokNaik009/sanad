@@ -20,6 +20,8 @@ interface StructuredRequest<S extends z.ZodType> {
   user: string;
   effort?: "low" | "medium" | "high";
   maxTokens?: number;
+  /** Skip the response cache (public, anonymous content must not be stored). */
+  noCache?: boolean;
 }
 
 interface Provider {
@@ -164,7 +166,7 @@ export class Llm {
   async structured<S extends z.ZodType>(req: StructuredRequest<S>): Promise<z.output<S>> {
     if (!this.enabled) throw new AppError("No AI provider is configured (AI_MODE=sample)", 503);
     const key = sha256(JSON.stringify([this.label, req.task, req.system, req.user]));
-    const cached = await this.store.get<{ id: string; value: unknown }>(CACHE_OWNER, "llm_cache", key);
+    const cached = req.noCache ? null : await this.store.get<{ id: string; value: unknown }>(CACHE_OWNER, "llm_cache", key);
     if (cached) {
       const hit = req.schema.safeParse(cached.value);
       if (hit.success) return hit.data;
@@ -177,7 +179,7 @@ export class Llm {
           const raw = await provider.complete(req, retryNote);
           const parsed = req.schema.safeParse(raw);
           if (parsed.success) {
-            await this.store.put(CACHE_OWNER, "llm_cache", { id: key, value: parsed.data, provider: provider.name });
+            if (!req.noCache) await this.store.put(CACHE_OWNER, "llm_cache", { id: key, value: parsed.data, provider: provider.name });
             return parsed.data;
           }
           retryNote = `Your previous JSON failed validation: ${parsed.error.issues.slice(0, 5).map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}. Return corrected JSON only.`;

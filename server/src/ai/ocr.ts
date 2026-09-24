@@ -81,22 +81,23 @@ export class Ocr {
   }
 
   /** Transcribe page images (data: URLs). Pages are read one at a time so each can fall back on its own. */
-  async read(pages: string[]): Promise<{ text: string; pages: OcrPage[] }> {
+  /** `cache: false` for anonymous uploads (the public bill explainer): nothing is stored. */
+  async read(pages: string[], options: { cache?: boolean } = {}): Promise<{ text: string; pages: OcrPage[] }> {
     if (!this.enabled) {
       console.warn("[ocr] no vision model configured: set AI_MODE=model and GROQ_API_KEY or OPENROUTER_API_KEY");
       throw new AppError("Reading scans isn't available right now. Please paste the note text instead.", 503);
     }
     const out: OcrPage[] = [];
-    for (const [i, image] of pages.entries()) out.push(await this.readPage(i + 1, image));
+    for (const [i, image] of pages.entries()) out.push(await this.readPage(i + 1, image, options.cache ?? true));
     const text = out
       .map((p) => (pages.length > 1 ? `--- Page ${p.page} ---\n${p.text}` : p.text))
       .join("\n\n");
     return { text, pages: out };
   }
 
-  private async readPage(page: number, image: string): Promise<OcrPage> {
+  private async readPage(page: number, image: string, useCache: boolean): Promise<OcrPage> {
     const key = sha256(`ocr:v1:${image}`);
-    const cached = await this.store.get<{ id: string; text: string; provider: string; model: string }>(CACHE_OWNER, "ocr_cache", key);
+    const cached = useCache && await this.store.get<{ id: string; text: string; provider: string; model: string }>(CACHE_OWNER, "ocr_cache", key);
     if (cached) return { page, text: cached.text, provider: cached.provider, model: cached.model, ms: 0, cached: true, fellBackFrom: [] };
 
     const failures: string[] = [];
@@ -105,7 +106,7 @@ export class Ocr {
         const started = Date.now();
         try {
           const text = await this.call(vm, image);
-          await this.store.put(CACHE_OWNER, "ocr_cache", { id: key, text, provider: vm.provider, model: vm.model });
+          if (useCache) await this.store.put(CACHE_OWNER, "ocr_cache", { id: key, text, provider: vm.provider, model: vm.model });
           if (failures.length) console.warn(`[ocr] page ${page} read by ${vm.provider}:${vm.model} after: ${failures.join(" | ")}`);
           return { page, text, provider: vm.provider, model: vm.model, ms: Date.now() - started, cached: false, fellBackFrom: failures };
         } catch (error) {

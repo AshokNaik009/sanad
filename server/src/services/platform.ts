@@ -889,7 +889,7 @@ export class Platform {
    */
   async explainBill(pages: string[]): Promise<BillExplanation> {
     if (!this.llm.ocr.enabled) throw new AppError("We can't read bill photos right now. Please ask the clinic's billing desk to go through it with you.", 503);
-    const text = (await this.llm.ocr.read(pages).catch(() => {
+    const text = (await this.llm.ocr.read(pages, { cache: false }).catch(() => {
       throw new AppError("We couldn't read that photo. Try a sharper, well-lit picture of the whole bill.", 422);
     })).text;
     if (!text.trim() || /^\[no text\]$/i.test(text.trim())) throw new AppError("We couldn't find any text on that photo. Try a sharper, well-lit picture of the whole bill.", 422);
@@ -904,6 +904,7 @@ export class Platform {
             user: `Bill transcript:\n\n${text.slice(0, 8000)}`,
             effort: "low",
             maxTokens: 2048,
+            noCache: true,
           })
           .catch(() => null)
       : null;
