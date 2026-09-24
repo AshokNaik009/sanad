@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "concurrently -k -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:web\"",
     "dev:api": "tsx watch server/src/index.ts",
-    "dev:web": "vite --config web/vite.config.ts",
+    "dev:web": "sleep 3 && vite --config web/vite.config.ts",
     "build": "vite build --config web/vite.config.ts",
     "start": "NODE_ENV=production tsx server/src/index.ts",
     "reset-demo": "tsx scripts/reset-demo.ts",
@@ -36,6 +36,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^4.7.0",
     "concurrently": "^10.0.5",
+    "pdfjs-dist": "^6.3.289",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "tailwindcss": "^4.3.3",

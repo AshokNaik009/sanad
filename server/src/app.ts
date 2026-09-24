@@ -48,11 +48,18 @@ export function createApi(deps: AppDeps) {
   const { store, org } = platform;
   const api = new Hono<Env>();
 
-  api.use("*", bodyLimit({ maxSize: 2 * 1024 * 1024, onError: (c) => c.json({ error: "Request too large" }, 413) }));
+  const tooLarge = { onError: (c: any) => c.json({ error: "Request too large" }, 413) };
+  const smallBody = bodyLimit({ maxSize: 2 * 1024 * 1024, ...tooLarge });
+  // Scanned pages arrive as base64 images, so /ocr gets a larger ceiling than every other route.
+  api.use("*", (c, next) => (c.req.path.endsWith("/ocr") ? next() : smallBody(c, next)));
+  api.use("/ocr", bodyLimit({ maxSize: 24 * 1024 * 1024, ...tooLarge }));
 
   // Public, no-login patient share page (minimal data, expiring token).
   api.get("/share/:token", async (c) => c.json(await platform.sharedView(c.req.param("token"))));
-  api.get("/health", async (c) => c.json({ ok: true, ai: platform.llm.label, gateway: platform.gateway.name, org: ORGANIZATION.name }));
+  api.get("/health", async (c) => c.json({ ok: true, ai: platform.llm.label, ocr: platform.llm.ocr.label, gateway: platform.gateway.name, org: ORGANIZATION.name }));
+
+  // Demo sign-in screen: the seeded accounts a visitor can choose from (no secrets, synthetic org).
+  api.get("/accounts", (c) => c.json({ users: USERS.map(({ id, name, role }) => ({ id, name, role })), organization: ORGANIZATION.name }));
 
   // MVP identity: a seeded user id plus an optional shared access key. Replace with SSO before a pilot.
   api.use("*", async (c, next) => {
@@ -75,7 +82,7 @@ export function createApi(deps: AppDeps) {
   const body = async <S extends z.ZodType>(c: { req: { json: () => Promise<unknown> } }, schema: S): Promise<z.output<S>> =>
     schema.parse(await c.req.json().catch(() => ({})));
 
-  api.get("/me", (c) => c.json({ user: c.get("user"), users: USERS, ai: platform.llm.engine, aiLabel: platform.llm.label, organization: ORGANIZATION }));
+  api.get("/me", (c) => c.json({ user: c.get("user"), users: USERS, ai: platform.llm.engine, aiLabel: platform.llm.label, ocr: platform.llm.ocr.enabled, organization: ORGANIZATION }));
   api.get("/reference", allow("read"), (c) =>
     c.json({
       payers: PAYERS.map(({ id, name, authRequired, submissionWindowDays, resubmissionWindowDays, plans }) => ({ id, name, authRequired, submissionWindowDays, resubmissionWindowDays, plans })),
@@ -129,6 +136,20 @@ export function createApi(deps: AppDeps) {
     const input = await body(c, EncounterInput);
     const result = await platform.createEncounter({ ...input, source: input.externalId ? "api" : "upload" }, c.get("actor"));
     return c.json(result.encounter, result.created ? 201 : 200);
+  });
+  // Scanned note intake (M1.1): page images in, transcript out for the coder to review before saving.
+  api.post("/ocr", allow("intake"), async (c) => {
+    const input = await body(
+      c,
+      z.object({
+        pages: z
+          .array(z.string().regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/, "Each page must be a PNG, JPEG or WebP data URL").max(6_000_000, "Page image too large; scan at a lower resolution"))
+          .min(1)
+          .max(10, "At most 10 pages per upload"),
+      }),
+    );
+    const result = await platform.llm.ocr.read(input.pages);
+    return c.json({ ...result, chain: platform.llm.ocr.label });
   });
   // EMR push (M1.2): minimal FHIR R4 Encounter, idempotent on the resource id.
   api.post("/fhir/Encounter", allow("intake"), async (c) => {

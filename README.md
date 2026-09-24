@@ -14,11 +14,49 @@ Turns a clinical note into a coded, scrubbed, regulator-format claim, submits it
 
 > **Hackathon MVP. Synthetic data only.** The gateway is a spec-faithful mock of DHA eClaimLink / DOH Shafafiya. Denial codes, price lists and payers are fictional configuration. Do not load real patient data.
 
+## Why Sanad
+
+### The problem
+
+UAE private clinics are paid mostly by insurers, through the DHA eClaimLink (Dubai) and DOH Shafafiya (Abu Dhabi) portals. Getting paid is a manual chain: read the doctor's note, pick the codes, check the payer's rules and contract prices, build the claim file, submit, then chase whatever comes back denied or underpaid. Each hand-off leaks money:
+
+- **Claims are rejected for fixable reasons.** A missing prior approval, a code with no supporting note, or a price above contract means a denial, weeks of delay and rework.
+- **Denials are worked late or never.** They arrive as coded remittance files, pile up in no particular order, and quietly expire past the resubmission window.
+- **Underpayments go unnoticed.** Nobody checks every paid line against the contract price.
+- **Cash is hard to predict.** Finance can't see what is stuck, with which payer, or what will land this month.
+
+### For whom
+
+Small and mid-sized outpatient clinics and polyclinics in Dubai and Abu Dhabi that bill insurers directly and have no large revenue-cycle team. Sanad gives each person on that team a job-specific view:
+
+| Who | What Sanad does for them |
+| --- | --- |
+| **Medical coder** | Suggests codes and shows the sentence in the note behind each one. |
+| **Biller** | Scrubs the claim before it goes out, ranks the denials to work first, and drafts the resubmission. |
+| **Doctor** | Gets a one-click query only when the note is missing something the payer needs. |
+| **Finance / owner** | Sees reconciliation, underpayments, AED at risk and a 30/60/90-day cash forecast. |
+| **Front desk** | Checks eligibility, handles prior approvals and gives a cost estimate before the visit. |
+| **Patient** | Gets a plain-language bill page. |
+
+### The measurable outcome
+
+The goal: **every claim clean the first time, every denial worked within 48 hours, every dirham owed collected and forecast.** Sanad tracks the numbers behind that on its own dashboard, so a pilot clinic can compare them against its baseline from before Sanad:
+
+| Outcome | Metric (shown in Sanad) | Direction |
+| --- | --- | --- |
+| Fewer avoidable rejections | First-pass acceptance rate; denial rate by payer, doctor and code | ↑ first-pass, ↓ denials |
+| Faster denial recovery | Time from denial to resubmission; share worked within 48 h; denials expired unworked | ↓ time, target 48 h, ↓ expired |
+| Money not left on the table | AED recovered from resubmissions; underpaid AED flagged against contract | ↑ recovered |
+| Faster cash | Days in A/R and A/R by payer and age; forecast vs actual collections | ↓ days, forecast within a stated band |
+| Less manual work | Coding time per encounter; share of AI codes accepted without edit | ↓ time, ↑ acceptance |
+
+**What the MVP already proves** on synthetic data (details in [Evaluation](#evaluation)): the right principal diagnosis on 18/20 gold notes, 30/30 seeded claim errors caught before submission with 0 false flags, 15/15 denials classified, resubmission drafts in under 2 s, and 95/95 remittance lines reconciled with 5/5 underpayments caught.
+
 ## What it does
 
 | Journey | What happens |
 | --- | --- |
-| **J1 · Encounter → clean claim** | AI suggests ICD-10-CM and CPT/HCPCS/drug codes. Each code highlights the sentence that supports it and carries a confidence score. Missing specificity (laterality, diabetes type, conservative-therapy duration) becomes a one-click doctor query. The scrubber runs 10 rule families and returns a Clean-Claim Score with one-click fixes. Claim XML is generated and schema-validated, then submitted behind an approval gate. |
+| **J1 · Encounter → clean claim** | Notes arrive as text, PDF, a photo or scan, or a FHIR push; scans are read by a vision-model OCR chain. AI suggests ICD-10-CM and CPT/HCPCS/drug codes. Each code highlights the sentence that supports it and carries a confidence score. Missing specificity (laterality, diabetes type, conservative-therapy duration) becomes a one-click doctor query. The scrubber runs 10 rule families and returns a Clean-Claim Score with one-click fixes. Claim XML is generated and schema-validated, then submitted behind an approval gate. |
 | **J2 · Eligibility and prior auth** | Eligibility check by member ID or Emirates ID. Auth-required detection per payer. AI-drafted clinical justification sent as a `Prior.Request`; status is tracked automatically. |
 | **J3 · Denial → resubmission** | Remittance advice is parsed and each denied line is classified: a lookup table first, AI only for free-text payer comments. The worklist is ranked by **amount × recovery probability × deadline urgency**. AI drafts field fixes and a justification in which **every sentence cites the note**; sentences without a verifiable quote are blocked. Resubmit as a correction or internal complaint, or write off with a mandatory reason. |
 | **J4 · Reconciliation** | Every remittance line is auto-matched to its claim and activity. Underpayments against the contract price are flagged. Excel export has Paid, Denied and Variance tabs. |
@@ -57,18 +95,12 @@ Switch roles with the user picker (Aisha Billing, Rahul Coder, Dr. Fatima, Omar 
 | `LLM_PROVIDERS` | Provider chain tried in order, default `groq,openrouter` (`anthropic` also supported). Any failure falls through to the next provider, then to the offline engine, so the demo never dead-ends. |
 | `GROQ_API_KEY`, `GROQ_MODEL` | Groq (default `openai/gpt-oss-120b`, JSON mode). |
 | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_PROVIDER_ORDER` | OpenRouter fallback (e.g. `minimax/minimax-m3` with provider order `GMICloud`). |
+| `GROQ_VISION_MODELS`, `OPENROUTER_VISION_MODELS` | OCR chain for scanned notes, tried model by model in provider order. Defaults: Groq `qwen/qwen3.8-27b`, then OpenRouter `google/gemma-4-31b-it:free`, `google/gemma-4-26b-a4b-it:free`, `nvidia/nemotron-nano-12b-v2-vl:free`. A 429/5xx gets one short retry before falling through. PDFs with a text layer are read in the browser with no AI. |
 | `SANAD_ENCRYPTION_KEY` | 32 random bytes, base64, for AES-256-GCM of Emirates IDs. Required in production. |
 | `SANAD_ACCESS_KEY` | Optional shared bearer key in front of the API. |
 | `GATEWAY_URL` | Point the adapter at a real gateway proxy. Unset = in-process mock gateway. |
 | `ADJUDICATION_DELAY_SECONDS`, `UNDERPAYMENT_THRESHOLD_AED` | Mock payer timing and the reconciliation variance threshold. |
 
-## The 5-minute demo
-
-1. **Hook**: *Overview* shows AED at risk, A/R by payer and age, and denial reasons.
-2. **Clean claim**: *Coding* → the gold-set physiotherapy note (Mariam Al Mansoori) → **Suggest codes** → accept → **Create claim & scrub**. The scrubber flags a missing prior approval and an over-contract price (score **56**). Apply both fixes (**100**), then **Approve & submit**. The mock gateway acknowledges; the claim is paid a few seconds later.
-3. **Denial**: *Denials* → **Fetch payer remittances**. Fifteen denials land, ranked; a high-value knee-MRI medical-necessity denial is first. **Draft with AI** → review cited sentences → **Approve & resubmit**.
-4. **Money**: *Money* shows seeded underpayments, then **Export Excel**. ⌘K → "Which payer underpays us most?" → the answer plus the SQL it ran. The 30/60/90 forecast is on *Overview*.
-5. **Close**: `npm run eval` for the numbers; *Audit* shows the verified hash chain.
 
 `npm run reset-demo` (or **Reset demo data** as Admin) restores the seeded state in about 20 seconds on Supabase.
 
@@ -139,7 +171,7 @@ Sanad reuses ideas from OpenMuse, the parent repo: the Hono server layout, the `
 - **Vite + React SPA** instead of Next.js; one Node process serves the API and the built app.
 - **Structural JSON schema** in `schemas/` instead of the official XSD. Swap in the published DHA/DOH XSD before a pilot.
 - **MVP identity** via a user picker plus optional shared key; replace with SSO before a pilot.
-- **No OCR**: text notes, `.txt` upload and FHIR `Encounter` push (`POST /api/fhir/Encounter`, idempotent on the resource id).
+- **OCR via vision LLMs, not a dedicated OCR engine**: photos and scanned PDFs go to `POST /api/ocr` and the vision-model chain above; the transcript is shown for review before the encounter is saved. Notes can also be pasted, loaded as `.txt`, or pushed as a FHIR `Encounter` (`POST /api/fhir/Encounter`, idempotent on the resource id).
 
 ## Scripts
 

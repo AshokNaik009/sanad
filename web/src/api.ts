@@ -16,6 +16,21 @@ export function setCurrentUser(id: string) {
     /* storage unavailable */
   }
 }
+/** The explicitly signed-in demo account, or null after sign-out / on first visit. */
+export function signedInUser(): string | null {
+  try {
+    return localStorage.getItem(USER_KEY);
+  } catch {
+    return currentUser();
+  }
+}
+export function signOut() {
+  try {
+    localStorage.removeItem(USER_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}
 
 export class ApiError extends Error {
   constructor(

@@ -6,6 +6,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import type { Config } from "../config.ts";
 import type { Store } from "../db.ts";
+import { Ocr } from "./ocr.ts";
 import { AppError, sha256 } from "../util.ts";
 
 const CACHE_OWNER = "system";
@@ -137,12 +138,15 @@ export function buildProviders(config: Config, env: NodeJS.ProcessEnv = process.
 
 export class Llm {
   private readonly providers: Provider[];
+  /** Vision chain for scanned documents; separate from the text chain because the models differ. */
+  readonly ocr: Ocr;
   constructor(
     private readonly config: Config,
     private readonly store: Store,
     providers?: Provider[],
   ) {
     this.providers = config.aiMode === "model" ? (providers ?? buildProviders(config)) : [];
+    this.ocr = new Ocr(config, store);
   }
 
   get enabled(): boolean {

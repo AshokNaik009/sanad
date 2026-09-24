@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { go } from "../App";
 import { api, date, useApi } from "../api";
+import { ACCEPT, readNoteFile } from "../scan";
 import { AiTag, Badge, Button, Card, Dialog, Empty, ErrorBox, EvidenceNote, Field, Loading, PageHeader, StatusBadge, Table, cx, inputClass, useToast } from "../ui";
 
 export function CodingQueue() {
@@ -53,9 +54,21 @@ function UploadDialog({ open, onClose }: { open: boolean; onClose: () => void })
   const [form, setForm] = useState({ patientId: "", clinicianId: "", date: new Date().toISOString().slice(0, 10), note: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reading, setReading] = useState<string | null>(null);
+  const [source, setSource] = useState<string | null>(null);
   const readFile = async (file: File) => {
-    const text = await file.text();
-    setForm((f) => ({ ...f, note: text }));
+    setError(null);
+    setSource(null);
+    setReading("Reading file…");
+    try {
+      const result = await readNoteFile(file, setReading);
+      setForm((f) => ({ ...f, note: result.text }));
+      setSource(result.source);
+    } catch (e) {
+      setError(`${(e as Error).message}`);
+    } finally {
+      setReading(null);
+    }
   };
   const submit = async () => {
     setBusy(true);
@@ -70,7 +83,7 @@ function UploadDialog({ open, onClose }: { open: boolean; onClose: () => void })
     }
   };
   return (
-    <Dialog open={open} onClose={onClose} title="Add encounter" footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" busy={busy} onClick={submit}>Create encounter</Button></>}>
+    <Dialog open={open} onClose={onClose} title="Add encounter" footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" busy={busy} disabled={!!reading} onClick={submit}>Create encounter</Button></>}>
       <div className="space-y-3">
         <ErrorBox error={error} />
         <Field label="Patient">
@@ -88,10 +101,19 @@ function UploadDialog({ open, onClose }: { open: boolean; onClose: () => void })
           </Field>
           <Field label="Visit date"><input type="date" className={inputClass} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
         </div>
-        <Field label="Clinical note" hint="Paste text or load a .txt export. Scanned notes go through OCR in the pilot build.">
-          <textarea rows={8} className={inputClass} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="History, examination, assessment and plan…" />
+        <Field label="Clinical note" hint="Paste text, or upload a .txt, PDF or a photo/scan of the note. Scans are read by AI OCR; review the text before saving.">
+          <textarea rows={8} className={inputClass} value={form.note} disabled={!!reading} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="History, examination, assessment and plan…" />
         </Field>
-        <input type="file" accept=".txt,text/plain" onChange={(e) => e.target.files?.[0] && void readFile(e.target.files[0])} className="text-[12.5px]" />
+        <div className="flex flex-wrap items-center gap-3">
+          <label className={cx("keycap inline-flex cursor-pointer items-center gap-2 px-3 py-1.5 text-[12.5px] font-medium", reading && "pointer-events-none opacity-60")}>
+            <svg viewBox="0 0 16 16" className="size-3.5" fill="currentColor" aria-hidden><path d="M7.25 1.5h1.5v7.19l2.22-2.22 1.06 1.06L8 11.56 3.97 7.53l1.06-1.06 2.22 2.22zM2 12.5h12V14H2z" /></svg>
+            Upload note or scan
+            <input type="file" accept={ACCEPT} className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void readFile(f); }} />
+          </label>
+          <span className="text-[12px] text-muted">.txt · PDF · PNG · JPEG · WebP</span>
+        </div>
+        {reading && <p className="flex items-center gap-2 text-[12.5px] text-ai"><span className="caret" />{reading}</p>}
+        {source && !reading && <p className="text-[12px] text-muted">{source}</p>}
       </div>
     </Dialog>
   );

@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { api, currentUser, setCurrentUser, useApi } from "./api";
+import { api, currentUser, setCurrentUser, signOut, signedInUser, useApi } from "./api";
 import { AuditPage } from "./pages/audit";
 import { ClaimDetail, ClaimsPage } from "./pages/claims";
 import { CodingQueue, EncounterPage } from "./pages/coding";
@@ -9,6 +9,7 @@ import { DenialDetail, DenialsPage } from "./pages/denials";
 import { FrontDesk } from "./pages/frontdesk";
 import { Inbox } from "./pages/inbox";
 import { Landing } from "./pages/landing";
+import { Avatar, LoginPage } from "./pages/login";
 import { Reconciliation } from "./pages/reconciliation";
 import { SharePage } from "./pages/share";
 import { cx, useToast } from "./ui";
@@ -73,6 +74,9 @@ export function App() {
   const route = useRoute();
   if (route[0] === "share" && route[1]) return <SharePage token={route[1]} />;
   if (!route[0]) return <Landing />;
+  if (route[0] === "login") return <LoginPage next="/dashboard" />;
+  // Any app page without a signed-in account shows sign-in, then returns to that page.
+  if (!signedInUser()) return <LoginPage next={`/${route.join("/")}`} />;
   return <Shell route={route} />;
 }
 
@@ -81,6 +85,7 @@ function Shell({ route }: { route: string[] }) {
   const notes = useApi<any[]>("/notifications");
   const [copilot, setCopilot] = useState(false);
   const [bell, setBell] = useState(false);
+  const [account, setAccount] = useState(false);
   const toast = useToast();
   const role = me.data?.user.role as string | undefined;
   useEffect(() => {
@@ -102,6 +107,12 @@ function Shell({ route }: { route: string[] }) {
     setCurrentUser(id);
     window.location.reload();
   };
+  const logOut = () => {
+    signOut();
+    setAccount(false);
+    go("/");
+  };
+  const meName: string = me.data?.user.name ?? "";
   const resetDemo = async () => {
     toast("Resetting demo data…");
     await api("/demo/reset", { method: "POST" });
@@ -185,15 +196,20 @@ function Shell({ route }: { route: string[] }) {
           })}
         </nav>
         <div className="mt-3 space-y-2 border-t border-line pt-3">
-          <div className="rounded-xl bg-white/[0.03] px-2.5 py-2">
-            <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-ink-2">
-              <span className={cx("size-1.5 rounded-full", me.data?.ai === "model" ? "warm-fill" : "bg-muted")} />
-              AI {me.data?.ai === "model" ? "online" : "offline engine"}
-            </div>
-            <div className="mt-0.5 truncate font-mono text-[10.5px] text-muted" title={me.data?.aiLabel}>{me.data?.aiLabel}</div>
-          </div>
           {role === "admin" && (
             <button type="button" onClick={resetDemo} className="keycap w-full px-3 py-1.5 text-[12.5px] font-semibold">Reset demo data</button>
+          )}
+          {meName && (
+            <div className="flex items-center gap-2.5 rounded-xl border border-line bg-white/[0.03] p-2">
+              <Avatar name={meName} size="size-8" />
+              <div className="min-w-0 flex-1 leading-tight">
+                <div className="truncate text-[13px] font-medium text-white">{meName}</div>
+                <div className="truncate text-[11px] capitalize text-muted">{role === "frontdesk" ? "Front desk" : role}</div>
+              </div>
+              <button type="button" onClick={logOut} title="Log out" aria-label="Log out" className="grid size-8 place-items-center rounded-lg text-muted hover:bg-white/[0.06] hover:text-white">
+                <svg viewBox="0 0 16 16" className="size-4" fill="currentColor" aria-hidden><path d="M2 2h6v1.5H3.5v9H8V14H2zm8.5 2.5L14 8l-3.5 3.5-1.06-1.06 1.69-1.69H6v-1.5h5.13L9.44 5.56z" /></svg>
+              </button>
+            </div>
           )}
           <p className="px-1 text-[10.5px] leading-snug text-muted">{me.data?.organization.name} · synthetic data · {me.data?.organization.regulator} test gateway</p>
         </div>
@@ -239,11 +255,42 @@ function Shell({ route }: { route: string[] }) {
                   </div>
                 )}
               </div>
-              <select aria-label="Signed in as" value={currentUser()} onChange={(e) => switchUser(e.target.value)} className="max-w-[160px] rounded-full border border-line bg-white/[0.03] px-3 py-1.5 text-[12.5px] text-ink">
-                {(me.data?.users ?? []).map((u: any) => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <button type="button" aria-haspopup="menu" aria-expanded={account} onClick={() => setAccount((a) => !a)} className="flex items-center gap-2 rounded-full border border-line bg-white/[0.03] py-1 pl-1 pr-2.5 text-[12.5px] text-ink hover:border-white/20">
+                  {meName ? <Avatar name={meName} size="size-7" /> : <span className="size-7 rounded-full bg-white/10" />}
+                  <span className="hidden max-w-[140px] truncate sm:inline">{meName}</span>
+                  <svg viewBox="0 0 16 16" className="size-3 text-muted" fill="currentColor" aria-hidden><path d="M4 6l4 4 4-4z" /></svg>
+                </button>
+                {account && (
+                  <>
+                    <button type="button" aria-label="Close menu" className="fixed inset-0 z-30 cursor-default" onClick={() => setAccount(false)} />
+                    <div role="menu" className="glass absolute right-0 top-11 z-40 w-[min(92vw,280px)] rounded-2xl p-2 shadow-2xl">
+                      <div className="flex items-center gap-2.5 px-2 py-2">
+                        {meName && <Avatar name={meName} />}
+                        <div className="min-w-0 leading-tight">
+                          <div className="truncate text-[13.5px] font-medium text-white">{meName}</div>
+                          <div className="truncate text-[11.5px] text-muted">{me.data?.organization.name}</div>
+                        </div>
+                      </div>
+                      <div className="my-1 border-t border-line" />
+                      <div className="px-2 pb-1 pt-1.5 font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted/80">Switch account</div>
+                      {(me.data?.users ?? [])
+                        .filter((u: any) => u.id !== currentUser())
+                        .map((u: any) => (
+                          <button key={u.id} type="button" role="menuitem" onClick={() => switchUser(u.id)} className="flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left text-[13px] text-ink-2 hover:bg-white/[0.05] hover:text-white">
+                            <Avatar name={u.name} size="size-6" />
+                            {u.name}
+                          </button>
+                        ))}
+                      <div className="my-1 border-t border-line" />
+                      <button type="button" role="menuitem" onClick={logOut} className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left text-[13px] font-medium text-[#ff6b4a] hover:bg-[#ff2f3a]/10">
+                        <svg viewBox="0 0 16 16" className="size-4" fill="currentColor" aria-hidden><path d="M2 2h6v1.5H3.5v9H8V14H2zm8.5 2.5L14 8l-3.5 3.5-1.06-1.06 1.69-1.69H6v-1.5h5.13L9.44 5.56z" /></svg>
+                        Log out
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </header>
