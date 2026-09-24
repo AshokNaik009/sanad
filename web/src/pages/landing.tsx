@@ -26,7 +26,7 @@ const PATHS: Record<string, string> = {
   chat: "M2 2h12v9H6l-3 3v-3H2z",
   search: "M7 2a5 5 0 1 0 3.1 8.9l3 3 1-1-3-3A5 5 0 0 0 7 2m0 1.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7",
   doc: "M3 1h7l3 3v11H3zm1.5 1.5v11h7V5H9V2.5zM5.5 7h5v1.2h-5zm0 2.5h5v1.2h-5z",
-  code: "M5.5 4 1.5 8l4 4 1-1-3-3 3-3zm5 0-1 1 3 3-3 3 1 1 4-4z",
+  code: "M8.6 1.5H14v5.4L7.4 13.5 2.5 8.6zm2.9 1.6a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8",
   send: "M1.5 2 15 8 1.5 14l1.8-5.2L9 8 3.3 7.2z",
   undo: "M6 3 2 7l4 4V8h4a2.5 2.5 0 0 1 0 5H8v1.5h2a4 4 0 0 0 0-8H6z",
   coin: "M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1m.7 11v1H7.3v-1C6 11.8 5 11 5 9.8h1.4c0 .6.6 1 1.6 1s1.6-.4 1.6-1c0-.7-.6-.9-1.8-1.2C6.3 8.3 5.2 7.9 5.2 6.5c0-1 .8-1.8 2.1-2V3.5h1.4v1c1.2.2 2 1 2.1 2.1H9.4c0-.6-.6-1-1.4-1-.9 0-1.4.4-1.4.9 0 .6.6.8 1.8 1.1 1.5.4 2.6.8 2.6 2.3 0 1.1-.9 1.9-2.3 2.1",
@@ -171,7 +171,7 @@ function Hero() {
         <div className="hero-in mt-10 flex w-full flex-col items-stretch justify-center gap-4 sm:w-auto sm:flex-row sm:items-center" style={{ animationDelay: "240ms" }}>
           <button type="button" onClick={() => go("/coding/enc_0001")} className="keycap flex items-center justify-center gap-2 px-5 py-3 text-[14px] font-medium">
             <Icon name="code" />
-            Code a clinical note
+            Turn a note into billing codes
           </button>
           <button type="button" onClick={() => go("/denials")} className="keycap flex items-center justify-center gap-2 px-5 py-3 text-[14px] font-medium">
             <Icon name="undo" />
@@ -244,7 +244,7 @@ function Proof() {
 
 const LEAKS = [
   { icon: "shield", title: "Rejected for fixable reasons", body: "A missing prior approval, a code the note doesn't support, a price above contract. Each one is a denial, a delay, and rework." },
-  { icon: "clock", title: "Denials that expire", body: "They arrive as coded remittance files, pile up in no order, and quietly pass the resubmission window." },
+  { icon: "clock", title: "Denials that expire", body: "They arrive as cryptic insurer payment files, pile up in no order, and quietly pass the resubmission window." },
   { icon: "coin", title: "Underpayments nobody sees", body: "No one has time to check every paid line against the contract price, so the gap is simply lost." },
   { icon: "eye", title: "Cash you can't predict", body: "Finance can't see what's stuck, with which payer, or what will actually land this month." },
 ];
@@ -278,7 +278,7 @@ function Problem() {
 
 const STEPS = [
   { icon: "doc", title: "Note in", body: "Typed, PDF, photo or scan, or pushed from your EMR." },
-  { icon: "code", title: "AI codes it", body: "ICD-10 and CPT, each tied to the sentence that supports it." },
+  { icon: "code", title: "Billing codes found", body: "AI picks the diagnosis and treatment codes insurers need, each tied to the sentence that supports it." },
   { icon: "shield", title: "Scrubbed", body: "10 rule families and a 0–100 clean-claim score, with one-click fixes." },
   { icon: "send", title: "Approved & sent", body: "A named person approves; regulator-format XML goes out." },
   { icon: "undo", title: "Denials worked", body: "Ranked by value and deadline, with an appeal drafted from the note." },
@@ -433,7 +433,7 @@ function Product() {
       />
       <div className="mx-auto grid max-w-[1080px] gap-4 lg:grid-cols-5">
         <Reveal className="lg:col-span-3">
-          <Panel href="#/coding/enc_0001" title="AI coding with evidence" sub="Each suggested code highlights the exact sentence behind it. Vague notes become a one-click doctor query." className="h-full">
+          <Panel href="#/coding/enc_0001" title="Billing codes, with the reason shown" sub="Each suggested code highlights the exact sentence behind it. Vague notes become a one-click doctor query." className="h-full">
             <EvidenceMock />
           </Panel>
         </Reveal>
@@ -467,7 +467,7 @@ const OUTCOMES = [
 ] as const;
 
 const ROLES = [
-  ["Coder", "Codes with the evidence already highlighted"],
+  ["Claims coder", "Billing codes with the reason already highlighted"],
   ["Biller", "Scrubs, submits and works the ranked worklist"],
   ["Doctor", "Only asked when the note is missing something"],
   ["Finance", "Reconciliation, AED at risk and the forecast"],
@@ -568,7 +568,7 @@ function Closing() {
               <Icon name="arrow" className="size-3.5" />
             </button>
             <button type="button" onClick={() => go("/coding/enc_0001")} className="ghost-pill px-5 py-2.5 text-[14px] font-medium">
-              Try AI coding
+              Try it on a doctor's note
             </button>
           </div>
           <div className="mt-6">

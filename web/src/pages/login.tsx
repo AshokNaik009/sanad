@@ -4,7 +4,7 @@ import { ErrorBox, Loading, cx } from "../ui";
 
 const ROLE_BLURB: Record<string, string> = {
   biller: "Scrub, approve and submit claims; work denials",
-  coder: "Review AI code suggestions against the note",
+  coder: "Check the billing codes AI reads from each doctor's note",
   doctor: "Answer documentation queries",
   finance: "Reconciliation, underpayments and cash forecast",
   frontdesk: "Eligibility, prior approval and estimates",

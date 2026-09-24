@@ -82,8 +82,10 @@ const STATUS_TONE: Record<string, Tone> = {
   claimed: "good",
   answered: "good",
 };
+/** Plain-language labels where the internal status name reads like jargon. */
+const STATUS_LABEL: Record<string, string> = { to_code: "needs codes", coded: "codes ready", claimed: "claim made" };
 export function StatusBadge({ status }: { status: string }) {
-  return <Badge tone={STATUS_TONE[status] ?? "neutral"}>{status.replaceAll("_", " ")}</Badge>;
+  return <Badge tone={STATUS_TONE[status] ?? "neutral"}>{STATUS_LABEL[status] ?? status.replaceAll("_", " ")}</Badge>;
 }
 
 export function Stat({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: "crit" | "good" }) {

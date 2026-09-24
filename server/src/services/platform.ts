@@ -292,7 +292,7 @@ export class Platform {
       gross: 0,
       patientShare: 0,
       net: 0,
-      timeline: [{ status: "draft", at: new Date().toISOString(), by: actor.id, note: "Created from coded encounter" }],
+      timeline: [{ status: "draft", at: new Date().toISOString(), by: actor.id, note: "Created from the doctor's note" }],
     };
     recalcTotals(claim, patient);
     await this.rescrub(claim);

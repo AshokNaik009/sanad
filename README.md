@@ -31,7 +31,7 @@ Small and mid-sized outpatient clinics and polyclinics in Dubai and Abu Dhabi th
 
 | Who | What Sanad does for them |
 | --- | --- |
-| **Medical coder** | Suggests codes and shows the sentence in the note behind each one. |
+| **Claims coder** (medical coder) | Suggests the billing codes (diagnosis and treatment) and shows the sentence in the note behind each one. |
 | **Biller** | Scrubs the claim before it goes out, ranks the denials to work first, and drafts the resubmission. |
 | **Doctor** | Gets a one-click query only when the note is missing something the payer needs. |
 | **Finance / owner** | Sees reconciliation, underpayments, AED at risk and a 30/60/90-day cash forecast. |
@@ -48,7 +48,7 @@ The goal: **every claim clean the first time, every denial worked within 48 hour
 | Faster denial recovery | Time from denial to resubmission; share worked within 48 h; denials expired unworked | ↓ time, target 48 h, ↓ expired |
 | Money not left on the table | AED recovered from resubmissions; underpaid AED flagged against contract | ↑ recovered |
 | Faster cash | Days in A/R and A/R by payer and age; forecast vs actual collections | ↓ days, forecast within a stated band |
-| Less manual work | Coding time per encounter; share of AI codes accepted without edit | ↓ time, ↑ acceptance |
+| Less manual work | Time to code each visit; share of AI codes accepted without edit | ↓ time, ↑ acceptance |
 
 **What the MVP already proves** on synthetic data (details in [Evaluation](#evaluation)): the right principal diagnosis on 18/20 gold notes, 30/30 seeded claim errors caught before submission with 0 false flags, 15/15 denials classified, resubmission drafts in under 2 s, and 95/95 remittance lines reconciled with 5/5 underpayments caught.
 
@@ -64,9 +64,9 @@ The goal: **every claim clean the first time, every denial worked within 48 hour
 | **J6 · Patient transparency** | Cost estimate from plan benefits, an expiring, no-login, plain-language bill page (first name only), and a public **bill explainer**: a patient photographs any bill and gets each line, any denial code and the questions to ask their insurer in plain language (rate-limited, no login). |
 | **J7 · Agents that act, people who approve** | **Denial Autopilot** drafts a cited appeal for every open denial in the background and queues each one as a **proposal**; nothing is sent until a biller approves that exact content (hash-checked, audited). The ⌘K copilot routes questions to tools (data questions, denial-code explanations, claim checks, worklist, drafting appeals) and answers with cards. **Regulator Watch** re-checks the DOH lists daily, reloads changed rules in place and reports which open claims they affect. **Payer memory** learns from adjudicated claims which services each insurer denies well above its usual rate, and why, and shows it on the claim before submission. |
 
-| AI coding with evidence | Scrubber with one-click fixes |
+| Billing codes with the reason shown | Scrubber with one-click fixes |
 | --- | --- |
-| ![AI coding](docs/ai-coding.png) | ![Scrubber](docs/scrubber.png) |
+| ![Billing codes](docs/ai-coding.png) | ![Scrubber](docs/scrubber.png) |
 
 | Denial draft citing the note | Revenue dashboard |
 | --- | --- |
@@ -172,7 +172,7 @@ Sanad reuses ideas from OpenMuse, the parent repo: the Hono server layout, the `
 ## Security and compliance posture
 
 - **Human approval gate**: claims, resubmissions and prior-auth requests require an explicit `confirm: true` from an authorised role; the approver and timestamp are stored on the record.
-- **RBAC**: biller, coder, doctor, finance, front desk and admin, least privilege (e.g. coders cannot submit; doctors see only their own queries).
+- **RBAC**: biller, coder, doctor, finance, front desk and admin, least privilege (e.g. claims coders cannot submit; doctors see only their own queries).
 - **Tenant isolation**: every record is keyed by organization. Copilot SQL runs in a `READ ONLY` transaction against views filtered by a transaction-local tenant setting, and a guard rejects anything but a single `SELECT` over those views.
 - **Encryption**: Emirates IDs are AES-256-GCM at rest, masked in every API response and in the XML preview.
 - **Audit**: append-only and SHA-256 hash-chained; `GET /api/audit/verify` detects tampering.

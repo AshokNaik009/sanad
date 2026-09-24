@@ -120,7 +120,7 @@ export function ClaimDetail({ id }: { id: string }) {
         sub={`${patient.name} · ${claim.payerName} · ${claim.clinicianName} · service ${date(claim.serviceDate)}`}
         actions={
           <>
-            {claim.encounterId && <Button onClick={() => go(`/coding/${claim.encounterId}`)}>Encounter</Button>}
+            {claim.encounterId && <Button onClick={() => go(`/coding/${claim.encounterId}`)}>Doctor's note</Button>}
             <Button busy={busy === "share"} onClick={() => act("share", async () => { const l = await api("/share", { json: { claimId: claim.id } }); setShare(`${window.location.origin}${window.location.pathname}#/share/${l.id}`); })}>Patient link</Button>
             {editable && <Button busy={busy === "scrub"} onClick={() => act("scrub", () => api(`/claims/${id}/scrub`, { method: "POST" }), "Re-scrubbed")}>Re-scrub</Button>}
             {editable && <Button variant="primary" disabled={blocking.length > 0} onClick={() => setConfirm(true)}>Approve & submit</Button>}

@@ -33,7 +33,7 @@ export const CLINICIANS: Clinician[] = [
 
 export const USERS: User[] = [
   { id: "u_aisha", orgId: ORG_ID, name: "Aisha (Billing)", role: "biller" },
-  { id: "u_rahul", orgId: ORG_ID, name: "Rahul (Coder)", role: "coder" },
+  { id: "u_rahul", orgId: ORG_ID, name: "Rahul (Claims coder)", role: "coder" },
   { id: "u_fatima", orgId: ORG_ID, name: "Dr. Fatima", role: "doctor", clinicianId: "cl_1" },
   { id: "u_omar", orgId: ORG_ID, name: "Omar (Finance)", role: "finance" },
   { id: "u_noor", orgId: ORG_ID, name: "Noor (Front desk)", role: "frontdesk" },
@@ -211,7 +211,7 @@ export function rebuildDenialCodes(): void {
 export const CATEGORY_LABEL: Record<DenialCategory, string> = {
   auth: "Authorisation",
   eligibility: "Eligibility",
-  coding: "Coding",
+  coding: "Billing codes",
   medical_necessity: "Medical necessity",
   pricing: "Pricing",
   duplicate: "Duplicate",

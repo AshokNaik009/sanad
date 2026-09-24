@@ -36,6 +36,24 @@ const CAN: Record<string, Role[]> = {
   rules: ["admin"],
 };
 
+/** How each permission reads in an error message. */
+const ACTION_LABEL: Record<string, string> = {
+  read: "view this",
+  code: "change billing codes",
+  intake: "add doctor's notes",
+  answerQuery: "answer doctor queries",
+  editClaim: "edit claims",
+  submit: "submit claims",
+  denials: "work denials",
+  remittance: "load insurer payments",
+  finance: "view finance",
+  frontdesk: "use the front desk",
+  audit: "view the audit log",
+  demo: "run demo actions",
+  reset: "reset the demo",
+  rules: "check regulator rules",
+};
+
 export interface AppDeps {
   platform: Platform;
   agents: { proposals: Proposals; autopilot: DenialAutopilot; copilot: CopilotAgent; regulatorWatch: RegulatorWatch };
@@ -100,7 +118,7 @@ export function createApi(deps: AppDeps) {
     await next();
   });
   const allow = (perm: keyof typeof CAN) => async (c: { get: (k: "user") => User }, next: () => Promise<void>) => {
-    if (!CAN[perm].includes(c.get("user").role)) throw new AppError(`Your role cannot ${perm}`, 403);
+    if (!CAN[perm].includes(c.get("user").role)) throw new AppError(`Your role can't ${ACTION_LABEL[perm] ?? perm}`, 403);
     await next();
   };
 

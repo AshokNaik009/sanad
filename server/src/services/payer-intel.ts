@@ -103,7 +103,7 @@ export class PayerIntel {
 const ADVICE: Record<DenialCategory, string> = {
   auth: "Attach a prior approval number before submitting.",
   eligibility: "Re-check the patient's cover and network on the visit date.",
-  coding: "Make sure a supporting diagnosis is coded for this service.",
+  coding: "Make sure the claim includes a diagnosis that supports this service.",
   medical_necessity: "Send the clinical justification with the claim (symptoms, failed treatments, findings).",
   pricing: "Bill at the contract price for this insurer.",
   duplicate: "Check this service was not already billed for the same date.",

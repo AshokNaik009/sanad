@@ -11,12 +11,12 @@ export function CodingQueue() {
   return (
     <div>
       <PageHeader
-        title="Coding queue"
-        sub="Encounters from the EMR waiting to become clean claims. AI suggests codes; a coder decides."
+        title="Notes → Codes"
+        sub="Doctor's notes waiting to become clean claims. AI suggests the billing codes; a claims coder decides."
         actions={<Button variant="primary" onClick={() => setUpload(true)}>Add encounter note</Button>}
       />
       <div className="mb-4 flex flex-wrap gap-1">
-        {[["to_code", "To code"], ["coded", "Coded"], ["claimed", "Claimed"], ["", "All"]].map(([k, l]) => (
+        {[["to_code", "Needs codes"], ["coded", "Codes ready"], ["claimed", "Claim made"], ["", "All"]].map(([k, l]) => (
           <Button key={k} variant={status === k ? "primary" : "ghost"} onClick={() => setStatus(k)}>{l}</Button>
         ))}
       </div>
@@ -171,16 +171,16 @@ export function EncounterPage({ id }: { id: string }) {
         }
       />
       <div className="grid gap-5 lg:grid-cols-[1.1fr_1fr]">
-        <Card title="Clinical note" action={<span className="text-[11.5px] text-muted">Highlighted text is the evidence for each code</span>}>
+        <Card title="Clinical note" action={<span className="text-[11.5px] text-muted">Highlighted text is the reason for each code</span>}>
           <EvidenceNote note={e.note} spans={spans} active={active} />
         </Card>
         <div className="space-y-5">
           <Card
-            title={<span className="flex items-center gap-2">Code suggestions <AiTag engine={me.data?.ai} /></span>}
-            action={<Button variant="ai" busy={busy === "code"} onClick={() => run("code", () => api(`/encounters/${id}/code`, { method: "POST" }), "AI coding complete")}>{suggestions.length ? "Re-run AI coding" : "Suggest codes"}</Button>}
+            title={<span className="flex items-center gap-2">Billing code suggestions <AiTag engine={me.data?.ai} /></span>}
+            action={<Button variant="ai" busy={busy === "code"} onClick={() => run("code", () => api(`/encounters/${id}/code`, { method: "POST" }), "Billing codes suggested")}>{suggestions.length ? "Suggest again" : "Suggest billing codes"}</Button>}
           >
             {!suggestions.length ? (
-              <Empty>Run AI coding to get ICD-10-CM and CPT/HCPCS suggestions with evidence.</Empty>
+              <Empty>Let AI read the note and suggest the diagnosis and treatment codes the insurer needs, each linked to the sentence behind it.</Empty>
             ) : (
               <ul className="space-y-2">
                 {suggestions.map((s) => (
@@ -212,7 +212,7 @@ export function EncounterPage({ id }: { id: string }) {
             )}
             {suggestions.length > 0 && !e.claimId && (
               <div className="mt-3 flex gap-2">
-                <input className={inputClass} placeholder="Add a code manually (e.g. M54.2)" value={manual} onChange={(ev) => setManual(ev.target.value.toUpperCase())} />
+                <input className={inputClass} placeholder="Add a billing code manually (e.g. M54.2)" value={manual} onChange={(ev) => setManual(ev.target.value.toUpperCase())} />
                 <Button disabled={!manual} busy={busy === "manual"} onClick={() => run("manual", () => api(`/encounters/${id}/codes`, { json: { code: manual } })).then(() => setManual(""))}>Add</Button>
               </div>
             )}

@@ -13,7 +13,7 @@ export function Inbox() {
     setBusy(q.id);
     try {
       await api(`/queries/${q.id}/answer`, { json: { answer: answers[q.id] } });
-      toast("Answer added to the note; coding re-ran", "good");
+      toast("Answer added to the note; billing codes updated", "good");
       await list.reload();
     } catch (e) {
       toast((e as Error).message, "crit");
@@ -25,7 +25,7 @@ export function Inbox() {
   const done = (list.data ?? []).filter((q) => q.status !== "open");
   return (
     <div>
-      <PageHeader title="Inbox" sub="Appeals waiting for approval, and questions from coders to doctors." />
+      <PageHeader title="Inbox" sub="Appeals waiting for approval, and questions from the billing team to doctors." />
       <div className="mb-6">
         <ApprovalQueue role={me.data?.user.role} />
       </div>
